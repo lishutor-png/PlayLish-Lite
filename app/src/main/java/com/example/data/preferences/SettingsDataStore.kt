@@ -30,6 +30,8 @@ class SettingsDataStore(private val context: Context) {
         val HI_RES_ENGINE = booleanPreferencesKey("hi_res_engine")
         val IS_SHUFFLE = booleanPreferencesKey("is_shuffle")
         val SORT_BY_SHUFFLE = booleanPreferencesKey("sort_by_shuffle")
+        val LOUDNESS_NORMALIZATION = booleanPreferencesKey("loudness_normalization")
+        val TARGET_LOUDNESS_LUFS = floatPreferencesKey("target_loudness_lufs")
     }
 
     val userSettingsFlow: Flow<UserSettings> = context.dataStore.data.map { preferences ->
@@ -45,7 +47,9 @@ class SettingsDataStore(private val context: Context) {
             bassBoostLevel = preferences[PreferencesKeys.BASS_BOOST] ?: 350,
             hiResEngineEnabled = preferences[PreferencesKeys.HI_RES_ENGINE] ?: true,
             isShuffleEnabled = preferences[PreferencesKeys.IS_SHUFFLE] ?: false,
-            sortQueueByShuffleOrder = preferences[PreferencesKeys.SORT_BY_SHUFFLE] ?: false
+            sortQueueByShuffleOrder = preferences[PreferencesKeys.SORT_BY_SHUFFLE] ?: false,
+            loudnessNormalizationEnabled = preferences[PreferencesKeys.LOUDNESS_NORMALIZATION] ?: true,
+            targetLoudnessLufs = preferences[PreferencesKeys.TARGET_LOUDNESS_LUFS] ?: -14.0f
         )
     }
 
@@ -63,6 +67,8 @@ class SettingsDataStore(private val context: Context) {
             preferences[PreferencesKeys.HI_RES_ENGINE] = settings.hiResEngineEnabled
             preferences[PreferencesKeys.IS_SHUFFLE] = settings.isShuffleEnabled
             preferences[PreferencesKeys.SORT_BY_SHUFFLE] = settings.sortQueueByShuffleOrder
+            preferences[PreferencesKeys.LOUDNESS_NORMALIZATION] = settings.loudnessNormalizationEnabled
+            preferences[PreferencesKeys.TARGET_LOUDNESS_LUFS] = settings.targetLoudnessLufs
         }
     }
 
@@ -105,6 +111,13 @@ class SettingsDataStore(private val context: Context) {
     suspend fun updateHiResEngine(enabled: Boolean) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.HI_RES_ENGINE] = enabled
+        }
+    }
+
+    suspend fun updateLoudnessNormalization(enabled: Boolean, targetLufs: Float) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.LOUDNESS_NORMALIZATION] = enabled
+            preferences[PreferencesKeys.TARGET_LOUDNESS_LUFS] = targetLufs
         }
     }
 }

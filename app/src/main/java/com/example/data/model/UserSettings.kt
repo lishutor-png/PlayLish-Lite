@@ -12,5 +12,7 @@ data class UserSettings(
     val bassBoostLevel: Int = 350,                 // 0 to 1000
     val hiResEngineEnabled: Boolean = true,
     val isShuffleEnabled: Boolean = false,
-    val sortQueueByShuffleOrder: Boolean = false
+    val sortQueueByShuffleOrder: Boolean = false,
+    val loudnessNormalizationEnabled: Boolean = true,  // Automatic Volume Leveling / ReplayGain
+    val targetLoudnessLufs: Float = -14.0f             // Standard EBU R128 target (-14 LUFS)
 )

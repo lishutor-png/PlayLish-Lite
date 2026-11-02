@@ -7,6 +7,12 @@
 ## ✨ Fitur Unggulan
 
 - 🔀 **Sistem Acak Berurutan (Ordered Shuffle Queue)**: Setiap lagu yang diacak memiliki nomor urutan tetap (`#1`, `#2`, `#3`...) sehingga Anda tahu persis lagu apa yang akan diputar berikutnya. Tombol *Acak Ulang* memperbarui indeks urutan secara dinamis.
+- 🎚️ **Automatic Volume Leveling (Loudness Normalization / EBU R128)**:
+  - Otomatis menyetarakan kenyaringan audio (loudness) antar lagu secara dinamis berdasarkan standar EBU R128 / ReplayGain.
+  - Menghilangkan lonjakan suara mendadak antar lagu dengan penyesuaian gain presisi (`+X.X dB` / `-X.X dB`) dan pilihan target kenyaringan (-16 LUFS Santai, -14 LUFS Standar, -11 LUFS Kencang).
+- 📁 **Impor & Hapus Lagu**:
+  - Tombol **`+` (Impor Lagu)** untuk memilih dan menambahkan file audio langsung dari penyimpanan internal perangkat (FLAC, WAV, ALAC, MP3, OPUS, AAC).
+  - Tombol **Hapus Lagu** di setiap baris antrean lagu dengan dialog konfirmasi aman.
 - 🌙 **Pengatur Waktu Tidur & Ear-Safe Limiter**:
   - Timer tidur fleksibel (slider 5-120 menit & tombol cepat).
   - Opsi *Tunggu Lagu Selesai Dahulu* vs *Langsung Berhenti*.

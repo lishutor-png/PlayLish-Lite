@@ -278,4 +278,56 @@ class MusicRepository(private val context: Context) {
 
         deviceTracks
     }
+
+    suspend fun importAudioFromUri(uri: Uri): Track? = withContext(Dispatchers.IO) {
+        val retriever = android.media.MediaMetadataRetriever()
+        try {
+            retriever.setDataSource(context, uri)
+            val title = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_TITLE)
+                ?: uri.lastPathSegment?.substringAfterLast("/") ?: "Lagu Impor"
+            val artist = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_ARTIST) ?: "Artis Impor"
+            val album = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_ALBUM) ?: "Koleksi Impor"
+            val durationStr = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)
+            val duration = durationStr?.toLongOrNull() ?: 180000L
+            val bitrateStr = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_BITRATE)
+            val bitrateKbps = (bitrateStr?.toIntOrNull() ?: 320000) / 1000
+            val mimeType = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_MIMETYPE) ?: "audio/mpeg"
+
+            val format = when {
+                mimeType.contains("flac", ignoreCase = true) -> "FLAC"
+                mimeType.contains("wav", ignoreCase = true) -> "WAV"
+                mimeType.contains("alac", ignoreCase = true) -> "ALAC"
+                mimeType.contains("ogg", ignoreCase = true) -> "OGG"
+                mimeType.contains("aac", ignoreCase = true) -> "AAC"
+                mimeType.contains("opus", ignoreCase = true) -> "OPUS"
+                else -> "MP3"
+            }
+
+            val isHiRes = format in listOf("FLAC", "WAV", "ALAC", "DSD")
+
+            Track(
+                id = "imported_${System.currentTimeMillis()}_${(100..999).random()}",
+                title = title,
+                artist = artist,
+                album = album,
+                durationMs = duration,
+                uri = uri.toString(),
+                format = format,
+                sampleRateKHz = if (isHiRes) 96.0f else 44.1f,
+                bitDepth = if (isHiRes) 24 else 16,
+                bitrateKbps = bitrateKbps.coerceAtLeast(128),
+                isHiRes = isHiRes,
+                category = "Perangkat",
+                accentColor = 0xFF00E5FF,
+                isDeviceFile = true,
+                replayGainDb = ((-3..3).random()).toFloat()
+            )
+        } catch (_: Exception) {
+            null
+        } finally {
+            try {
+                retriever.release()
+            } catch (_: Exception) {}
+        }
+    }
 }

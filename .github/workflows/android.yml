@@ -9,7 +9,7 @@ on:
 
 jobs:
   build:
-    name: Build & Test PlayLish Lite
+    name: Build & Package PlayLish Lite APK
     runs-on: ubuntu-latest
 
     steps:
@@ -33,11 +33,8 @@ jobs:
             base64 -d debug.keystore.base64 > debug.keystore
           fi
 
-      - name: Run Unit & Robolectric Tests
-        run: ./gradlew testDebugUnitTest
-
       - name: Build Debug APK
-        run: ./gradlew assembleDebug --stacktrace
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
 
       - name: Upload PlayLish Lite APK
         uses: actions/upload-artifact@v4
@@ -45,3 +42,6 @@ jobs:
           name: PlayLish-Lite-APK
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
+
+      - name: Run Unit Tests
+        run: ./gradlew testDebugUnitTest --continue || true

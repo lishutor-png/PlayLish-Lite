@@ -49,7 +49,11 @@ data class PlayerUiState(
     val showSleepTimerDialog: Boolean = false,
     val showEqualizerDialog: Boolean = false,
     val showSettingsDialog: Boolean = false,
-    val showLyricsFullScreen: Boolean = false
+    val showLyricsFullScreen: Boolean = false,
+    val loudnessNormalizationActive: Boolean = true,
+    val appliedNormalizationGainDb: Float = 0.0f,
+    val trackToDelete: Track? = null,
+    val importStatusMessage: String? = null
 )
 
 class MusicPlayerViewModel(application: Application) : AndroidViewModel(application) {
@@ -109,9 +113,16 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     enabled = settings.hearingProtectionEnabled,
                     maxSafeCapPercent = settings.maxSafeVolumePercent
                 )
+                audioEngine.setLoudnessNormalization(
+                    enabled = settings.loudnessNormalizationEnabled,
+                    targetLufs = settings.targetLoudnessLufs
+                )
                 if (settings.isShuffleEnabled != _uiState.value.isShuffleEnabled) {
                     toggleShuffle(explicitShuffleState = settings.isShuffleEnabled)
                 }
+                _uiState.value = _uiState.value.copy(
+                    loudnessNormalizationActive = settings.loudnessNormalizationEnabled
+                )
             }
         }
     }
@@ -132,7 +143,8 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                         isPlaying = true,
                         activeLyricIndex = activeLyric,
                         currentDecibels = audioEngine.currentDecibels,
-                        effectiveVolumePercent = (audioEngine.effectiveVolume * 100).toInt()
+                        effectiveVolumePercent = (audioEngine.effectiveVolume * 100).toInt(),
+                        appliedNormalizationGainDb = audioEngine.appliedNormalizationGainDb
                     )
                 }
                 delay(100)
@@ -484,6 +496,85 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
     fun setShowLyricsFullScreen(show: Boolean) {
         _uiState.value = _uiState.value.copy(showLyricsFullScreen = show)
+    }
+
+    // --- Import Audio Files ---
+    fun importAudioFiles(uris: List<android.net.Uri>) {
+        if (uris.isEmpty()) return
+        viewModelScope.launch {
+            val newlyImported = mutableListOf<Track>()
+            for (uri in uris) {
+                val track = repository.importAudioFromUri(uri)
+                if (track != null) {
+                    newlyImported.add(track)
+                }
+            }
+            if (newlyImported.isNotEmpty()) {
+                _allTracks.value = _allTracks.value + newlyImported
+                syncQueueWithFilteredTracks()
+                _uiState.value = _uiState.value.copy(
+                    importStatusMessage = "Berhasil mengimpor ${newlyImported.size} lagu!"
+                )
+            }
+        }
+    }
+
+    fun clearImportStatusMessage() {
+        _uiState.value = _uiState.value.copy(importStatusMessage = null)
+    }
+
+    // --- Delete / Remove Track ---
+    fun promptDeleteTrack(track: Track) {
+        _uiState.value = _uiState.value.copy(trackToDelete = track)
+    }
+
+    fun cancelDeleteTrack() {
+        _uiState.value = _uiState.value.copy(trackToDelete = null)
+    }
+
+    fun confirmDeleteTrack() {
+        val track = _uiState.value.trackToDelete ?: return
+        val currentTrack = _uiState.value.currentTrack
+        val isDeletingCurrent = currentTrack?.id == track.id
+
+        val updatedList = _allTracks.value.filter { it.id != track.id }
+        _allTracks.value = updatedList
+        _uiState.value = _uiState.value.copy(trackToDelete = null)
+
+        if (isDeletingCurrent) {
+            if (updatedList.isNotEmpty()) {
+                playNext()
+            } else {
+                audioEngine.stop()
+                _uiState.value = _uiState.value.copy(
+                    currentTrack = null,
+                    isPlaying = false,
+                    currentPositionMs = 0L,
+                    durationMs = 0L,
+                    currentLyrics = emptyList()
+                )
+            }
+        }
+        syncQueueWithFilteredTracks()
+    }
+
+    // --- Loudness Normalization / Automatic Volume Leveling ---
+    fun toggleLoudnessNormalization(enabled: Boolean) {
+        audioEngine.setLoudnessNormalization(enabled, userSettings.value.targetLoudnessLufs)
+        _uiState.value = _uiState.value.copy(
+            loudnessNormalizationActive = enabled,
+            appliedNormalizationGainDb = audioEngine.appliedNormalizationGainDb
+        )
+        viewModelScope.launch {
+            settingsDataStore.updateLoudnessNormalization(enabled, userSettings.value.targetLoudnessLufs)
+        }
+    }
+
+    fun setTargetLoudnessLufs(targetLufs: Float) {
+        audioEngine.setLoudnessNormalization(_uiState.value.loudnessNormalizationActive, targetLufs)
+        viewModelScope.launch {
+            settingsDataStore.updateLoudnessNormalization(_uiState.value.loudnessNormalizationActive, targetLufs)
+        }
     }
 
     override fun onCleared() {

@@ -16,7 +16,8 @@ data class Track(
     val category: String = "Hi-Res",
     val accentColor: Long = 0xFFFF6D00,
     val isDeviceFile: Boolean = false,
-    val synthScaleType: Int = 0        // 0: Chill Ambient, 1: Sporty Energetic, 2: Sleep Deep Drone, 3: Acoustic Piano
+    val synthScaleType: Int = 0,       // 0: Chill Ambient, 1: Sporty Energetic, 2: Sleep Deep Drone, 3: Acoustic Piano
+    val replayGainDb: Float = 0.0f     // Track loudness offset in dB for ReplayGain/EBU R128
 ) {
     val durationFormatted: String
         get() {

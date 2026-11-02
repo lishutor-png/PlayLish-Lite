@@ -55,6 +55,7 @@ import com.example.ui.theme.OutfitFontFamily
 import com.example.ui.theme.RajdhaniFontFamily
 import com.example.ui.theme.SportOrange
 import com.example.ui.theme.TextMuted
+import com.example.ui.theme.TextWhite
 import com.example.ui.viewmodel.MusicPlayerViewModel
 
 @Composable
@@ -65,6 +66,15 @@ fun MainPlayerScreen(
     val uiState by viewModel.uiState.collectAsState()
     val userSettings by viewModel.userSettings.collectAsState()
     val filteredTracks = viewModel.getFilteredTracks()
+
+    // File Picker for importing audio files directly
+    val filePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenMultipleDocuments()
+    ) { uris ->
+        if (uris.isNotEmpty()) {
+            viewModel.importAudioFiles(uris)
+        }
+    }
 
     // Permission launcher for scanning device audio
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -122,8 +132,10 @@ fun MainPlayerScreen(
                     onToggleSortByShuffle = { viewModel.toggleSortQueueByShuffle() },
                     isSleepTimerActive = uiState.isSleepTimerActive,
                     sleepTimerSecondsRemaining = uiState.sleepTimerRemainingSeconds,
+                    loudnessNormalizationActive = uiState.loudnessNormalizationActive,
                     onOpenSleepTimer = { viewModel.setShowSleepTimerDialog(true) },
                     onOpenEqualizer = { viewModel.setShowEqualizerDialog(true) },
+                    onImportMusic = { filePickerLauncher.launch(arrayOf("audio/*")) },
                     onOpenSettings = { viewModel.setShowSettingsDialog(true) }
                 )
 
@@ -201,7 +213,8 @@ fun MainPlayerScreen(
                                 orderNumber = orderNum,
                                 isShuffleActive = uiState.isShuffleEnabled,
                                 isCurrentlyPlaying = isPlaying,
-                                onTrackClick = { viewModel.playTrack(track) }
+                                onTrackClick = { viewModel.playTrack(track) },
+                                onDeleteClick = { viewModel.promptDeleteTrack(track) }
                             )
                         }
                     }
@@ -252,6 +265,8 @@ fun MainPlayerScreen(
                     currentDecibels = uiState.currentDecibels,
                     isSleepTimerActive = uiState.isSleepTimerActive,
                     sleepTimerRemainingSeconds = uiState.sleepTimerRemainingSeconds,
+                    loudnessNormalizationActive = uiState.loudnessNormalizationActive,
+                    appliedGainDb = uiState.appliedNormalizationGainDb,
                     onTogglePlayPause = { viewModel.togglePlayPause() },
                     onPlayNext = { viewModel.playNext() },
                     onPlayPrevious = { viewModel.playPrevious() },
@@ -305,10 +320,15 @@ fun MainPlayerScreen(
         if (uiState.showEqualizerDialog) {
             EqualizerModal(
                 currentSettings = userSettings,
+                loudnessNormalizationActive = uiState.loudnessNormalizationActive,
+                targetLoudnessLufs = userSettings.targetLoudnessLufs,
+                appliedGainDb = uiState.appliedNormalizationGainDb,
                 onApplyPreset = { preset, bassBoost ->
                     viewModel.setEqualizerPreset(preset, bassBoost)
                 },
                 onToggleHiRes = { viewModel.toggleHiResEngine(it) },
+                onToggleLoudnessNormalization = { viewModel.toggleLoudnessNormalization(it) },
+                onSetTargetLoudness = { viewModel.setTargetLoudnessLufs(it) },
                 onDismiss = { viewModel.setShowEqualizerDialog(false) }
             )
         }
@@ -319,6 +339,88 @@ fun MainPlayerScreen(
                 isScanningDevice = uiState.isScanningDevice,
                 onScanDevice = { requestStoragePermissionAndScan() },
                 onDismiss = { viewModel.setShowSettingsDialog(false) }
+            )
+        }
+
+        // Delete Track Confirmation Dialog
+        if (uiState.trackToDelete != null) {
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { viewModel.cancelDeleteTrack() },
+                title = {
+                    Text(
+                        text = "Hapus Lagu?",
+                        fontFamily = RajdhaniFontFamily,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp,
+                        color = TextWhite
+                    )
+                },
+                text = {
+                    Text(
+                        text = "Hapus \"${uiState.trackToDelete?.title}\" oleh ${uiState.trackToDelete?.artist} dari daftar putar?",
+                        fontFamily = OutfitFontFamily,
+                        fontSize = 13.sp,
+                        color = TextMuted
+                    )
+                },
+                confirmButton = {
+                    Button(
+                        onClick = { viewModel.confirmDeleteTrack() },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = com.example.ui.theme.SportRed,
+                            contentColor = Color.White
+                        ),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text("Hapus", fontFamily = RajdhaniFontFamily, fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    androidx.compose.material3.OutlinedButton(
+                        onClick = { viewModel.cancelDeleteTrack() },
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text("Batal", fontFamily = RajdhaniFontFamily, color = TextWhite)
+                    }
+                },
+                containerColor = com.example.ui.theme.SportCardSurface,
+                shape = RoundedCornerShape(16.dp)
+            )
+        }
+
+        // Import Status Alert Dialog
+        if (uiState.importStatusMessage != null) {
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { viewModel.clearImportStatusMessage() },
+                title = {
+                    Text(
+                        text = "Impor Lagu Berhasil",
+                        fontFamily = RajdhaniFontFamily,
+                        fontWeight = FontWeight.Bold,
+                        color = com.example.ui.theme.SportLime
+                    )
+                },
+                text = {
+                    Text(
+                        text = uiState.importStatusMessage ?: "",
+                        fontFamily = OutfitFontFamily,
+                        color = TextWhite
+                    )
+                },
+                confirmButton = {
+                    Button(
+                        onClick = { viewModel.clearImportStatusMessage() },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = SportOrange,
+                            contentColor = Color.Black
+                        ),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text("OK", fontFamily = RajdhaniFontFamily, fontWeight = FontWeight.Bold)
+                    }
+                },
+                containerColor = com.example.ui.theme.SportCardSurface,
+                shape = RoundedCornerShape(16.dp)
             )
         }
     }

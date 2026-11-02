@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Sort
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Equalizer
@@ -77,8 +78,10 @@ fun MinimalistHeader(
     onToggleSortByShuffle: () -> Unit,
     isSleepTimerActive: Boolean,
     sleepTimerSecondsRemaining: Long,
+    loudnessNormalizationActive: Boolean,
     onOpenSleepTimer: () -> Unit,
     onOpenEqualizer: () -> Unit,
+    onImportMusic: () -> Unit,
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -199,6 +202,18 @@ fun MinimalistHeader(
                         imageVector = Icons.Default.Equalizer,
                         contentDescription = "Equalizer",
                         tint = TextWhite
+                    )
+                }
+
+                // Import Music button
+                IconButton(
+                    onClick = onImportMusic,
+                    modifier = Modifier.testTag("import_music_top_btn")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = "Impor Lagu",
+                        tint = SportCyan
                     )
                 }
 
@@ -344,8 +359,23 @@ fun MinimalistHeader(
                     }
                 }
 
-                // Actions: Reshuffle (Acak Ulang) & Sort Toggle
+                // Actions: AVL badge, Reshuffle (Acak Ulang) & Sort Toggle
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (loudnessNormalizationActive) {
+                        Text(
+                            text = "AVL ON",
+                            fontFamily = RajdhaniFontFamily,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 10.sp,
+                            color = SportLime,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(SportLime.copy(alpha = 0.15f))
+                                .padding(horizontal = 4.dp, vertical = 2.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                    }
+
                     if (isShuffleActive) {
                         // Reshuffle button with animated new order numbers
                         Row(

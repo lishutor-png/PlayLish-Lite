@@ -20,6 +20,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -55,6 +59,7 @@ fun TrackCard(
     isShuffleActive: Boolean,
     isCurrentlyPlaying: Boolean,
     onTrackClick: () -> Unit,
+    onDeleteClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val borderColor = if (isCurrentlyPlaying) SportOrange else Color.Transparent
@@ -161,14 +166,33 @@ fun TrackCard(
 
             Spacer(modifier = Modifier.width(10.dp))
 
-            // Duration
-            Text(
-                text = track.durationFormatted,
-                fontFamily = RajdhaniFontFamily,
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 13.sp,
-                color = if (isCurrentlyPlaying) SportOrange else TextMuted
-            )
+            // Duration & Delete Button
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = track.durationFormatted,
+                    fontFamily = RajdhaniFontFamily,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 13.sp,
+                    color = if (isCurrentlyPlaying) SportOrange else TextMuted
+                )
+
+                if (onDeleteClick != null) {
+                    Spacer(modifier = Modifier.width(4.dp))
+                    IconButton(
+                        onClick = onDeleteClick,
+                        modifier = Modifier
+                            .size(34.dp)
+                            .testTag("delete_track_${track.id}")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.DeleteOutline,
+                            contentDescription = "Hapus Lagu",
+                            tint = TextMuted.copy(alpha = 0.6f),
+                            modifier = Modifier.size(17.dp)
+                        )
+                    }
+                }
+            }
         }
     }
 }

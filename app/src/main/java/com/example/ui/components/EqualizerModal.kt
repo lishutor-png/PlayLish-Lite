@@ -69,13 +69,20 @@ import kotlin.math.roundToInt
 @Composable
 fun EqualizerModal(
     currentSettings: UserSettings,
+    loudnessNormalizationActive: Boolean,
+    targetLoudnessLufs: Float,
+    appliedGainDb: Float,
     onApplyPreset: (preset: String, bassBoost: Int) -> Unit,
     onToggleHiRes: (Boolean) -> Unit,
+    onToggleLoudnessNormalization: (Boolean) -> Unit,
+    onSetTargetLoudness: (Float) -> Unit,
     onDismiss: () -> Unit
 ) {
     var selectedPreset by remember { mutableStateOf(currentSettings.equalizerPreset) }
     var bassBoost by remember { mutableIntStateOf(currentSettings.bassBoostLevel) }
     var hiResEnabled by remember { mutableStateOf(currentSettings.hiResEngineEnabled) }
+    var avlEnabled by remember { mutableStateOf(loudnessNormalizationActive) }
+    var currentLufs by remember { mutableFloatStateOf(targetLoudnessLufs) }
 
     // 5 graphic bands in dB (-10 to +10 dB)
     var band60Hz by remember { mutableFloatStateOf(if (selectedPreset == "Bass Boost") 6f else 2f) }
@@ -392,6 +399,110 @@ fun EqualizerModal(
                                 uncheckedTrackColor = SportCardBorder
                             )
                         )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Automatic Volume Leveling / Loudness Normalization Card
+                Card(
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = SportCardSurfaceVariant),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, SportCardBorder),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = "Normalisasi Loudness (AVL)",
+                                        fontFamily = OutfitFontFamily,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 13.sp,
+                                        color = TextWhite
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    if (avlEnabled) {
+                                        Text(
+                                            text = "%+.1f dB".format(appliedGainDb),
+                                            fontFamily = RajdhaniFontFamily,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 10.sp,
+                                            color = SportLime,
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(4.dp))
+                                                .background(SportLime.copy(alpha = 0.15f))
+                                                .padding(horizontal = 4.dp, vertical = 1.dp)
+                                        )
+                                    }
+                                }
+                                Text(
+                                    text = "Menyetarakan rata-rata volume di semua lagu (EBU R128 / ReplayGain) agar kenyaringan tetap seimbang.",
+                                    fontFamily = OutfitFontFamily,
+                                    fontSize = 11.sp,
+                                    color = TextMuted
+                                )
+                            }
+                            Switch(
+                                checked = avlEnabled,
+                                onCheckedChange = {
+                                    avlEnabled = it
+                                    onToggleLoudnessNormalization(it)
+                                },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = Color.Black,
+                                    checkedTrackColor = SportLime,
+                                    uncheckedThumbColor = TextMuted,
+                                    uncheckedTrackColor = SportCardBorder
+                                )
+                            )
+                        }
+
+                        if (avlEnabled) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text(
+                                text = "Target Loudness: ${currentLufs.toInt()} LUFS",
+                                fontFamily = RajdhaniFontFamily,
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 11.sp,
+                                color = SportLime
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                listOf(-16f to "Santai (-16)", -14f to "Standar (-14)", -11f to "Kencang (-11)").forEach { (lufs, label) ->
+                                    val isSelected = currentLufs == lufs
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(if (isSelected) SportLime.copy(alpha = 0.2f) else SportCardSurface)
+                                            .border(1.dp, if (isSelected) SportLime else SportCardBorder, RoundedCornerShape(8.dp))
+                                            .clickable {
+                                                currentLufs = lufs
+                                                onSetTargetLoudness(lufs)
+                                            }
+                                            .padding(vertical = 6.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = label,
+                                            fontFamily = RajdhaniFontFamily,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 11.sp,
+                                            color = if (isSelected) SportLime else TextMuted
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
 

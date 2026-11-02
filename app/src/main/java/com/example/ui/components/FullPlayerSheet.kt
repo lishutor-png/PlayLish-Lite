@@ -96,6 +96,8 @@ fun FullPlayerSheet(
     currentDecibels: Float,
     isSleepTimerActive: Boolean,
     sleepTimerRemainingSeconds: Long,
+    loudnessNormalizationActive: Boolean = true,
+    appliedGainDb: Float = 0.0f,
     onTogglePlayPause: () -> Unit,
     onPlayNext: () -> Unit,
     onPlayPrevious: () -> Unit,
@@ -342,6 +344,25 @@ fun FullPlayerSheet(
                             fontWeight = FontWeight.Bold,
                             fontSize = 11.sp,
                             color = if (currentDecibels <= -10f) SportLime else SportOrange
+                        )
+                    }
+
+                    if (loudnessNormalizationActive) {
+                        Text(
+                            text = "|",
+                            fontSize = 11.sp,
+                            color = TextMuted
+                        )
+                        Text(
+                            text = "AVL %+.1f dB".format(appliedGainDb),
+                            fontFamily = RajdhaniFontFamily,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 10.sp,
+                            color = SportLime,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(SportLime.copy(alpha = 0.15f))
+                                .padding(horizontal = 4.dp, vertical = 1.dp)
                         )
                     }
                 }

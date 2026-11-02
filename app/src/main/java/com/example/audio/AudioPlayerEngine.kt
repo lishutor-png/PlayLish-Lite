@@ -36,6 +36,26 @@ class AudioPlayerEngine(
     private var isHearingSafetyActive: Boolean = true
     private var fadeMultiplier: Float = 1.0f        // For sleep timer gradual fade-out
 
+    // Automatic Volume Leveling / Loudness Normalization (ReplayGain / EBU R128)
+    private var isLoudnessNormalizationActive: Boolean = true
+    private var targetLoudnessLufs: Float = -14.0f
+    var appliedNormalizationGainDb: Float = 0.0f
+        private set
+
+    val normalizationMultiplier: Float
+        get() {
+            if (!isLoudnessNormalizationActive) {
+                appliedNormalizationGainDb = 0.0f
+                return 1.0f
+            }
+            val trackGain = currentPlayingTrack?.replayGainDb ?: 0.0f
+            // Standard EBU R128 (-14 LUFS target compensation)
+            val lufsDelta = (-14.0f) - targetLoudnessLufs
+            val totalGainDb = (trackGain + lufsDelta).coerceIn(-9.0f, 6.0f)
+            appliedNormalizationGainDb = totalGainDb
+            return Math.pow(10.0, totalGainDb / 20.0).toFloat().coerceIn(0.4f, 1.4f)
+        }
+
     val isPlaying: Boolean get() = isCurrentlyPlaying
     val currentPosition: Long
         get() {
@@ -67,7 +87,8 @@ class AudioPlayerEngine(
             } else {
                 userVolume
             }
-            return (base * fadeMultiplier).coerceIn(0.0f, 1.0f)
+            val norm = if (isLoudnessNormalizationActive) normalizationMultiplier else 1.0f
+            return (base * norm * fadeMultiplier).coerceIn(0.0f, 1.0f)
         }
 
     val currentDecibels: Float
@@ -275,6 +296,12 @@ class AudioPlayerEngine(
 
     fun setFadeMultiplier(multiplier: Float) {
         fadeMultiplier = multiplier.coerceIn(0.0f, 1.0f)
+        applyVolume()
+    }
+
+    fun setLoudnessNormalization(enabled: Boolean, targetLufs: Float) {
+        isLoudnessNormalizationActive = enabled
+        targetLoudnessLufs = targetLufs
         applyVolume()
     }
 
