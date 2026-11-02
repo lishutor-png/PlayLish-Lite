@@ -1,0 +1,6 @@
+{
+  "name": "PlayLish Lite",
+  "description": "Minimalist Hi-Res audio player with ordered shuffle indexing, smart sleep timer with gradual ear-safety limiter, and auto lyrics detection.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
