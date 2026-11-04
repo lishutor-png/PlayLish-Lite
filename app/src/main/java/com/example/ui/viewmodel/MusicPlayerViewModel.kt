@@ -697,25 +697,36 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
-    // --- Import Audio Files ---
+    // --- Import Audio & Lyrics Files ---
     fun importAudioFiles(uris: List<android.net.Uri>) {
         if (uris.isEmpty()) return
         viewModelScope.launch {
-            val newlyImported = mutableListOf<Track>()
-            for (uri in uris) {
-                val track = repository.importAudioFromUri(uri)
-                if (track != null) {
-                    newlyImported.add(track)
+            val batchResult = repository.importAudioAndLyricsBatch(uris)
+            val newlyImported = batchResult.importedTracks
+            val orphanLyrics = batchResult.orphanLyricsMap
+
+            var currentTracksList = _allTracks.value
+
+            // If orphan lyrics were picked (e.g. user selected .lrc files for songs already in library)
+            if (orphanLyrics.isNotEmpty()) {
+                currentTracksList = currentTracksList.map { track ->
+                    val titleNorm = track.title.trim().lowercase()
+                    val matchedLrc = orphanLyrics[titleNorm]
+                        ?: orphanLyrics.entries.firstOrNull { titleNorm.contains(it.key) || it.key.contains(titleNorm) }?.value
+                    if (matchedLrc != null && track.rawLyrics.isNullOrBlank()) {
+                        track.copy(rawLyrics = matchedLrc)
+                    } else track
                 }
             }
-            if (newlyImported.isNotEmpty()) {
-                val updated = _allTracks.value + newlyImported
+
+            if (newlyImported.isNotEmpty() || orphanLyrics.isNotEmpty()) {
+                val updated = (currentTracksList + newlyImported).distinctBy { it.id }
                 _allTracks.value = updated
                 repository.saveTracks(updated)
 
                 // If a playlist is selected, add imported songs directly to it
                 val currentPlId = _uiState.value.selectedPlaylistId
-                if (currentPlId != null) {
+                if (currentPlId != null && newlyImported.isNotEmpty()) {
                     val updatedPlaylists = _uiState.value.playlists.map { pl ->
                         if (pl.id == currentPlId) {
                             pl.copy(trackIds = (pl.trackIds + newlyImported.map { it.id }).distinct())
@@ -727,8 +738,17 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
                 syncQueueWithFilteredTracks()
 
-                // If currently no track was loaded, set the first imported track
-                if (_uiState.value.currentTrack == null && updated.isNotEmpty()) {
+                // Update current track lyrics if active song was matched
+                val activeTrack = _uiState.value.currentTrack
+                if (activeTrack != null) {
+                    val updatedActive = updated.find { it.id == activeTrack.id }
+                    if (updatedActive != null && updatedActive.rawLyrics != activeTrack.rawLyrics) {
+                        _uiState.value = _uiState.value.copy(
+                            currentTrack = updatedActive,
+                            currentLyrics = LyricsParser.parse(updatedActive.rawLyrics)
+                        )
+                    }
+                } else if (updated.isNotEmpty()) {
                     val first = updated.first()
                     _uiState.value = _uiState.value.copy(
                         currentTrack = first,
@@ -737,8 +757,21 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     )
                 }
 
+                val msg = buildString {
+                    if (newlyImported.isNotEmpty()) {
+                        append("Berhasil mengimpor ${newlyImported.size} lagu")
+                    }
+                    val matchedCount = newlyImported.count { !it.rawLyrics.isNullOrBlank() }
+                    if (matchedCount > 0) {
+                        append(" dengan $matchedCount lirik otomatis")
+                    }
+                    if (orphanLyrics.isNotEmpty()) {
+                        append(". ${orphanLyrics.size} file lirik terhubung!")
+                    }
+                }
+
                 _uiState.value = _uiState.value.copy(
-                    importStatusMessage = "Berhasil mengimpor ${newlyImported.size} lagu ke PlayLish Lite!"
+                    importStatusMessage = msg.ifEmpty { "Impor selesai!" }
                 )
             }
         }

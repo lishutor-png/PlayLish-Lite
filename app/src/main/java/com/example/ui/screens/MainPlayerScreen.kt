@@ -173,7 +173,7 @@ fun MainPlayerScreen(
                     onCreatePlaylistClick = { viewModel.setShowCreatePlaylistDialog(true) },
                     onOpenSleepTimer = { viewModel.setShowSleepTimerDialog(true) },
                     onOpenEqualizer = { viewModel.setShowEqualizerDialog(true) },
-                    onImportMusic = { filePickerLauncher.launch(arrayOf("audio/*")) },
+                    onImportMusic = { filePickerLauncher.launch(arrayOf("*/*", "audio/*", "text/*", "application/octet-stream")) },
                     onOpenSettings = { viewModel.setShowSettingsDialog(true) }
                 )
 
@@ -237,7 +237,7 @@ fun MainPlayerScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Button(
-                                    onClick = { filePickerLauncher.launch(arrayOf("audio/*")) },
+                                    onClick = { filePickerLauncher.launch(arrayOf("*/*", "audio/*", "text/*", "application/octet-stream")) },
                                     colors = ButtonDefaults.buttonColors(
                                         containerColor = SportOrange,
                                         contentColor = Color.Black
@@ -370,6 +370,8 @@ fun MainPlayerScreen(
                     isWaitingForTrackEndToSleep = uiState.isWaitingForTrackEndToSleep,
                     loudnessNormalizationActive = uiState.loudnessNormalizationActive,
                     appliedGainDb = uiState.appliedNormalizationGainDb,
+                    currentLyrics = uiState.currentLyrics,
+                    activeLyricIndex = uiState.activeLyricIndex,
                     onTogglePlayPause = { viewModel.togglePlayPause() },
                     onPlayNext = { viewModel.playNext() },
                     onPlayPrevious = { viewModel.playPrevious() },
@@ -380,6 +382,18 @@ fun MainPlayerScreen(
                     onOpenSleepTimer = { viewModel.setShowSleepTimerDialog(true) },
                     onOpenEqualizer = { viewModel.setShowEqualizerDialog(true) },
                     onOpenLyrics = { viewModel.setShowLyricsFullScreen(true) },
+                    onImportLyrics = {
+                        uiState.currentTrack?.let {
+                            viewModel.promptImportLyrics(it)
+                            lyricsFilePickerLauncher.launch(arrayOf("text/*", "application/octet-stream", "*/*"))
+                        }
+                    },
+                    onPasteLyrics = {
+                        uiState.currentTrack?.let {
+                            viewModel.promptImportLyrics(it)
+                            viewModel.setShowPasteLyricsDialog(true)
+                        }
+                    },
                     onClose = { viewModel.closeFullPlayer() }
                 )
             }

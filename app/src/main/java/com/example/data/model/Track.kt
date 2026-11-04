@@ -13,6 +13,7 @@ data class Track(
     val bitrateKbps: Int = 920,        // 320, 920, 1411, 4608
     val isHiRes: Boolean = true,
     val rawLyrics: String? = null,
+    val albumArtUri: String? = null,
     val category: String = "Hi-Res",
     val accentColor: Long = 0xFFFF6D00,
     val isDeviceFile: Boolean = false,

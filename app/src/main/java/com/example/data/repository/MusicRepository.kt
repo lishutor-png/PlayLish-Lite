@@ -40,7 +40,8 @@ class MusicRepository(private val context: Context) {
             MediaStore.Audio.Media.ARTIST,
             MediaStore.Audio.Media.ALBUM,
             MediaStore.Audio.Media.DURATION,
-            MediaStore.Audio.Media.DATA
+            MediaStore.Audio.Media.DATA,
+            MediaStore.Audio.Media.ALBUM_ID
         )
 
         val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0"
@@ -62,6 +63,7 @@ class MusicRepository(private val context: Context) {
                 val albumCol = it.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)
                 val durationCol = it.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
                 val dataCol = it.getColumnIndexOrThrow(MediaStore.Audio.Media.DATA)
+                val albumIdCol = it.getColumnIndex(MediaStore.Audio.Media.ALBUM_ID)
 
                 while (it.moveToNext()) {
                     val id = it.getLong(idCol)
@@ -70,6 +72,7 @@ class MusicRepository(private val context: Context) {
                     val album = it.getString(albumCol) ?: "Unknown Album"
                     val duration = it.getLong(durationCol)
                     val filePath = it.getString(dataCol) ?: ""
+                    val albumId = if (albumIdCol >= 0) it.getLong(albumIdCol) else -1L
 
                     if (duration > 5000) { // filter out short notifications
                         val uri = Uri.withAppendedPath(
@@ -83,6 +86,14 @@ class MusicRepository(private val context: Context) {
 
                         val isHiRes = extension in listOf("FLAC", "WAV", "ALAC", "DSD", "AIFF")
                         val detectedLyrics = findMatchingLyricsForFilePath(filePath)
+                        val albumArtUri = if (albumId > 0) {
+                            android.content.ContentUris.withAppendedId(
+                                Uri.parse("content://media/external/audio/albumart"),
+                                albumId
+                            ).toString()
+                        } else {
+                            findMatchingArtworkForFilePath(filePath)
+                        }
 
                         deviceTracks.add(
                             Track(
@@ -98,6 +109,7 @@ class MusicRepository(private val context: Context) {
                                 bitrateKbps = if (isHiRes) 1411 else 320,
                                 isHiRes = isHiRes,
                                 rawLyrics = detectedLyrics,
+                                albumArtUri = albumArtUri,
                                 category = "Perangkat",
                                 accentColor = if (isHiRes) 0xFFFF6D00 else 0xFF00E5FF,
                                 isDeviceFile = true,
@@ -113,7 +125,7 @@ class MusicRepository(private val context: Context) {
     }
 
     // Imports audio from a user selected Document URI with persistable permission
-    suspend fun importAudioFromUri(uri: Uri): Track? = withContext(Dispatchers.IO) {
+    suspend fun importAudioFromUri(uri: Uri, companionLyrics: String? = null): Track? = withContext(Dispatchers.IO) {
         // Take persistable URI permission so it survives app restarts
         try {
             val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION
@@ -144,7 +156,21 @@ class MusicRepository(private val context: Context) {
             }
 
             val isHiRes = format in listOf("FLAC", "WAV", "ALAC", "DSD")
-            val autoLyrics = findMatchingLyricsForUri(uri, title)
+            val autoLyrics = companionLyrics ?: findMatchingLyricsForUri(uri, title)
+
+            // Extract embedded album art (APIC frame in ID3 / FLAC)
+            val embeddedArt = retriever.embeddedPicture
+            val albumArtUri: String? = if (embeddedArt != null && embeddedArt.isNotEmpty()) {
+                try {
+                    val artDir = java.io.File(context.cacheDir, "album_art")
+                    if (!artDir.exists()) artDir.mkdirs()
+                    val artFile = java.io.File(artDir, "art_${System.currentTimeMillis()}_${(100..999).random()}.jpg")
+                    artFile.writeBytes(embeddedArt)
+                    artFile.toURI().toString()
+                } catch (_: Exception) { null }
+            } else {
+                findMatchingArtworkForUri(uri)
+            }
 
             Track(
                 id = "imported_${System.currentTimeMillis()}_${(100..999).random()}",
@@ -159,6 +185,7 @@ class MusicRepository(private val context: Context) {
                 bitrateKbps = bitrateKbps.coerceAtLeast(128),
                 isHiRes = isHiRes,
                 rawLyrics = autoLyrics,
+                albumArtUri = albumArtUri,
                 category = "Perangkat",
                 accentColor = 0xFF00E5FF,
                 isDeviceFile = true,
@@ -227,5 +254,128 @@ class MusicRepository(private val context: Context) {
         } catch (_: Exception) {}
 
         return null
+    }
+
+    fun getFileNameFromUri(uri: Uri): String {
+        var name: String? = null
+        try {
+            context.contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                    if (nameIndex >= 0) {
+                        name = cursor.getString(nameIndex)
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+        return name ?: uri.lastPathSegment?.substringAfterLast("/") ?: "file_${System.currentTimeMillis()}"
+    }
+
+    fun findMatchingArtworkForFilePath(filePath: String): String? {
+        if (filePath.isBlank()) return null
+        return try {
+            val file = java.io.File(filePath)
+            val parent = file.parentFile ?: return null
+            val baseWithoutExt = file.nameWithoutExtension
+
+            val candidateFiles = listOf(
+                java.io.File(parent, "$baseWithoutExt.jpg"),
+                java.io.File(parent, "$baseWithoutExt.png"),
+                java.io.File(parent, "$baseWithoutExt.jpeg"),
+                java.io.File(parent, "cover.jpg"),
+                java.io.File(parent, "cover.png"),
+                java.io.File(parent, "folder.jpg"),
+                java.io.File(parent, "album.jpg")
+            )
+            val matched = candidateFiles.firstOrNull { it.exists() && it.canRead() && it.length() > 0 }
+            matched?.toURI()?.toString()
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    fun findMatchingArtworkForUri(uri: Uri): String? {
+        // Try MediaStore lookup first
+        try {
+            val projection = arrayOf(MediaStore.Audio.Media.DATA)
+            context.contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val data = cursor.getString(0)
+                    if (!data.isNullOrBlank()) {
+                        val art = findMatchingArtworkForFilePath(data)
+                        if (!art.isNullOrBlank()) return art
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+
+        // Try path resolution
+        try {
+            val path = uri.path ?: ""
+            val cleanPath = when {
+                path.contains("/document/primary:") -> "/storage/emulated/0/" + path.substringAfter("/document/primary:")
+                path.startsWith("/raw:") -> path.substringAfter("/raw:")
+                path.startsWith("/storage/") -> path
+                else -> null
+            }
+            if (cleanPath != null) {
+                val art = findMatchingArtworkForFilePath(cleanPath)
+                if (!art.isNullOrBlank()) return art
+            }
+        } catch (_: Exception) {}
+
+        return null
+    }
+
+    data class BatchImportResult(
+        val importedTracks: List<Track>,
+        val orphanLyricsMap: Map<String, String> // base name -> lyrics content
+    )
+
+    suspend fun importAudioAndLyricsBatch(uris: List<Uri>): BatchImportResult = withContext(Dispatchers.IO) {
+        val lyricsMap = mutableMapOf<String, String>() // normalized base name -> lrc text
+        val audioUris = mutableListOf<Uri>()
+
+        for (uri in uris) {
+            val fileName = getFileNameFromUri(uri)
+            val lower = fileName.lowercase()
+            if (lower.endsWith(".lrc") || lower.endsWith(".txt")) {
+                try {
+                    val text = context.contentResolver.openInputStream(uri)?.use { it.bufferedReader().readText() }
+                    if (!text.isNullOrBlank()) {
+                        val base = fileName.substringBeforeLast(".").trim().lowercase()
+                        lyricsMap[base] = text
+                    }
+                } catch (_: Exception) {}
+            } else {
+                audioUris.add(uri)
+            }
+        }
+
+        val newlyImported = mutableListOf<Track>()
+        val usedLyricsKeys = mutableSetOf<String>()
+
+        for (audioUri in audioUris) {
+            val audioName = getFileNameFromUri(audioUri)
+            val audioBase = audioName.substringBeforeLast(".").trim().lowercase()
+
+            val matchedKey = lyricsMap.keys.firstOrNull { key ->
+                key == audioBase || audioBase.contains(key) || key.contains(audioBase)
+            } ?: if (audioUris.size == 1 && lyricsMap.size == 1) lyricsMap.keys.first() else null
+
+            val companionLyrics = if (matchedKey != null) {
+                usedLyricsKeys.add(matchedKey)
+                lyricsMap[matchedKey]
+            } else null
+
+            val track = importAudioFromUri(audioUri, companionLyrics = companionLyrics)
+            if (track != null) {
+                newlyImported.add(track)
+            }
+        }
+
+        val remainingLyrics = lyricsMap.filterKeys { !usedLyricsKeys.contains(it) }
+
+        BatchImportResult(newlyImported, remainingLyrics)
     }
 }

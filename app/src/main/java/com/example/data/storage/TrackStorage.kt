@@ -36,6 +36,7 @@ class TrackStorage(private val context: Context) {
                         bitrateKbps = obj.optInt("bitrateKbps", 320),
                         isHiRes = obj.optBoolean("isHiRes", false),
                         rawLyrics = if (obj.has("rawLyrics") && !obj.isNull("rawLyrics")) obj.getString("rawLyrics") else null,
+                        albumArtUri = if (obj.has("albumArtUri") && !obj.isNull("albumArtUri")) obj.getString("albumArtUri") else null,
                         category = obj.optString("category", "Semua"),
                         accentColor = obj.optLong("accentColor", 0xFFFF6D00),
                         isDeviceFile = obj.optBoolean("isDeviceFile", true),
@@ -67,6 +68,7 @@ class TrackStorage(private val context: Context) {
                 obj.put("bitrateKbps", track.bitrateKbps)
                 obj.put("isHiRes", track.isHiRes)
                 obj.put("rawLyrics", track.rawLyrics)
+                obj.put("albumArtUri", track.albumArtUri)
                 obj.put("category", track.category)
                 obj.put("accentColor", track.accentColor)
                 obj.put("isDeviceFile", track.isDeviceFile)

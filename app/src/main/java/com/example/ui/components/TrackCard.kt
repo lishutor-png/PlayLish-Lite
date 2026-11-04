@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -87,7 +88,7 @@ fun TrackCard(
                 .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // ORDER BADGE (Crucial for ordered shuffle tracking)
+            // ORDER BADGE or ALBUM ART (Crucial for ordered shuffle tracking)
             Box(
                 modifier = Modifier
                     .size(38.dp)
@@ -101,7 +102,26 @@ fun TrackCard(
                     ),
                 contentAlignment = Alignment.Center
             ) {
-                if (isCurrentlyPlaying) {
+                if (!track.albumArtUri.isNullOrBlank()) {
+                    coil.compose.AsyncImage(
+                        model = track.albumArtUri,
+                        contentDescription = null,
+                        contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(RoundedCornerShape(8.dp))
+                    )
+                    if (isCurrentlyPlaying) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(Color.Black.copy(alpha = 0.5f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            MiniWaveAnimation()
+                        }
+                    }
+                } else if (isCurrentlyPlaying) {
                     MiniWaveAnimation()
                 } else {
                     Text(

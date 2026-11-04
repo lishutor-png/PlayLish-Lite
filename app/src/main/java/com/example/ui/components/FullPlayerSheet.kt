@@ -25,12 +25,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.Equalizer
 import androidx.compose.material.icons.filled.FormatQuote
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Hearing
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
@@ -43,6 +45,10 @@ import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.ui.layout.ContentScale
+import coil.compose.AsyncImage
+import com.example.data.model.LyricLine
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -83,6 +89,7 @@ import com.example.ui.theme.TextMuted
 import com.example.ui.theme.TextWhite
 import com.example.ui.viewmodel.PlaybackRepeatMode
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FullPlayerSheet(
     track: Track?,
@@ -99,6 +106,8 @@ fun FullPlayerSheet(
     isWaitingForTrackEndToSleep: Boolean = false,
     loudnessNormalizationActive: Boolean = true,
     appliedGainDb: Float = 0.0f,
+    currentLyrics: List<LyricLine> = emptyList(),
+    activeLyricIndex: Int = -1,
     onTogglePlayPause: () -> Unit,
     onPlayNext: () -> Unit,
     onPlayPrevious: () -> Unit,
@@ -109,6 +118,8 @@ fun FullPlayerSheet(
     onOpenSleepTimer: () -> Unit,
     onOpenEqualizer: () -> Unit,
     onOpenLyrics: () -> Unit,
+    onImportLyrics: () -> Unit = {},
+    onPasteLyrics: () -> Unit = {},
     onClose: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -240,60 +251,81 @@ fun FullPlayerSheet(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Sporty Vinyl Disc Album Art
-            Box(
-                modifier = Modifier
-                    .size(220.dp)
-                    .clip(CircleShape)
-                    .background(
-                        Brush.radialGradient(
-                            listOf(SportOrange.copy(alpha = 0.25f), Color.Transparent)
-                        )
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                // Vinyl outer groove
+            // Album Art: Real Cover Image if available, otherwise stylish Vinyl Disc
+            if (!track.albumArtUri.isNullOrBlank()) {
                 Box(
                     modifier = Modifier
-                        .size(190.dp)
-                        .rotate(discRotation)
-                        .clip(CircleShape)
-                        .background(
-                            Brush.sweepGradient(
-                                listOf(
-                                    Color(0xFF161B22),
-                                    Color(0xFF212833),
-                                    Color(0xFF161B22),
-                                    Color(0xFF2C3545),
-                                    Color(0xFF161B22)
-                                )
-                            )
-                        )
-                        .border(2.dp, SportCardBorder, CircleShape),
+                        .size(220.dp)
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(SportCardSurface)
+                        .border(1.5.dp, SportCardBorder, RoundedCornerShape(20.dp)),
                     contentAlignment = Alignment.Center
                 ) {
-                    // Inner Center Label with Sporty Emblem
+                    AsyncImage(
+                        model = track.albumArtUri,
+                        contentDescription = "Cover Album ${track.title}",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(RoundedCornerShape(20.dp))
+                    )
+                }
+            } else {
+                // Sporty Vinyl Disc Album Art
+                Box(
+                    modifier = Modifier
+                        .size(220.dp)
+                        .clip(CircleShape)
+                        .background(
+                            Brush.radialGradient(
+                                listOf(SportOrange.copy(alpha = 0.25f), Color.Transparent)
+                            )
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    // Vinyl outer groove
                     Box(
                         modifier = Modifier
-                            .size(70.dp)
+                            .size(190.dp)
+                            .rotate(discRotation)
                             .clip(CircleShape)
-                            .background(SportOrange)
-                            .border(3.dp, Color.Black, CircleShape),
+                            .background(
+                                Brush.sweepGradient(
+                                    listOf(
+                                        Color(0xFF161B22),
+                                        Color(0xFF212833),
+                                        Color(0xFF161B22),
+                                        Color(0xFF2C3545),
+                                        Color(0xFF161B22)
+                                    )
+                                )
+                            )
+                            .border(2.dp, SportCardBorder, CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.GraphicEq,
-                            contentDescription = null,
-                            tint = Color.Black,
-                            modifier = Modifier.size(32.dp)
-                        )
+                        // Inner Center Label with Sporty Emblem
+                        Box(
+                            modifier = Modifier
+                                .size(70.dp)
+                                .clip(CircleShape)
+                                .background(SportOrange)
+                                .border(3.dp, Color.Black, CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.GraphicEq,
+                                contentDescription = null,
+                                tint = Color.Black,
+                                modifier = Modifier.size(32.dp)
+                            )
+                        }
                     }
                 }
             }
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Audio Specs HUD Row (Hi-Res specs & Real-time decibels)
+            // Audio Specs HUD Row (Hi-Res specs & Real-time decibels - with clean dot separators, no vertical bars)
             Surface(
                 shape = RoundedCornerShape(10.dp),
                 color = SportCardSurface,
@@ -301,7 +333,7 @@ fun FullPlayerSheet(
             ) {
                 Row(
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
@@ -313,9 +345,9 @@ fun FullPlayerSheet(
                     )
 
                     Text(
-                        text = "|",
-                        fontSize = 11.sp,
-                        color = TextMuted
+                        text = "•",
+                        fontSize = 9.sp,
+                        color = TextMuted.copy(alpha = 0.5f)
                     )
 
                     Text(
@@ -327,9 +359,9 @@ fun FullPlayerSheet(
                     )
 
                     Text(
-                        text = "|",
-                        fontSize = 11.sp,
-                        color = TextMuted
+                        text = "•",
+                        fontSize = 9.sp,
+                        color = TextMuted.copy(alpha = 0.5f)
                     )
 
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -351,9 +383,9 @@ fun FullPlayerSheet(
 
                     if (loudnessNormalizationActive) {
                         Text(
-                            text = "|",
-                            fontSize = 11.sp,
-                            color = TextMuted
+                            text = "•",
+                            fontSize = 9.sp,
+                            color = TextMuted.copy(alpha = 0.5f)
                         )
                         Text(
                             text = "AVL %+.1f dB".format(appliedGainDb),
@@ -395,6 +427,171 @@ fun FullPlayerSheet(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // JENDELA KECIL LIRIK (Mini Lyrics Window on Main Player)
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = SportCardSurface,
+                border = androidx.compose.foundation.BorderStroke(1.dp, SportCardBorder),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .clickable { onOpenLyrics() }
+                    .testTag("mini_lyrics_window")
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.FormatQuote,
+                                contentDescription = null,
+                                tint = SportOrange,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "LIRIK BERJALAN",
+                                fontFamily = RajdhaniFontFamily,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 11.sp,
+                                color = SportOrange,
+                                letterSpacing = 1.sp
+                            )
+                        }
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(SportCyanDim)
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = "Layar Penuh",
+                                fontFamily = RajdhaniFontFamily,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 10.sp,
+                                color = SportCyan
+                            )
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Icon(
+                                imageVector = Icons.Default.OpenInNew,
+                                contentDescription = null,
+                                tint = SportCyan,
+                                modifier = Modifier.size(10.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    if (currentLyrics.isNotEmpty()) {
+                        val activeLine = currentLyrics.getOrNull(activeLyricIndex)
+                        val nextLine = currentLyrics.getOrNull(activeLyricIndex + 1)
+                        val prevLine = if (activeLyricIndex > 0) currentLyrics.getOrNull(activeLyricIndex - 1) else null
+
+                        Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                            if (prevLine != null) {
+                                Text(
+                                    text = prevLine.text,
+                                    fontFamily = OutfitFontFamily,
+                                    fontSize = 11.sp,
+                                    color = TextMuted.copy(alpha = 0.45f),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                            Text(
+                                text = activeLine?.text ?: "•••",
+                                fontFamily = OutfitFontFamily,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 15.sp,
+                                lineHeight = 20.sp,
+                                color = SportOrange,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            if (nextLine != null) {
+                                Text(
+                                    text = nextLine.text,
+                                    fontFamily = OutfitFontFamily,
+                                    fontSize = 12.sp,
+                                    color = TextMuted,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                    } else {
+                        Column {
+                            Text(
+                                text = "Lirik belum terdeteksi untuk lagu ini.",
+                                fontFamily = OutfitFontFamily,
+                                fontSize = 11.sp,
+                                color = TextMuted
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Surface(
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = SportOrangeDim,
+                                    modifier = Modifier
+                                        .clickable { onImportLyrics() }
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Add,
+                                            contentDescription = null,
+                                            tint = SportOrange,
+                                            modifier = Modifier.size(12.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = "Pilih File .LRC",
+                                            fontFamily = RajdhaniFontFamily,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 10.sp,
+                                            color = SportOrange
+                                        )
+                                    }
+                                }
+
+                                Surface(
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = SportCyanDim,
+                                    modifier = Modifier
+                                        .clickable { onPasteLyrics() }
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = "✍️ Tempel Teks",
+                                            fontFamily = RajdhaniFontFamily,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 10.sp,
+                                            color = SportCyan
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
 
             Spacer(modifier = Modifier.height(14.dp))
 
@@ -510,7 +707,7 @@ fun FullPlayerSheet(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Scrubber Slider
+            // Scrubber Slider - Sleek round thumb without vertical ticks or lines
             Slider(
                 value = if (isDraggingSlider) dragPosition else progress,
                 onValueChange = {
@@ -522,10 +719,21 @@ fun FullPlayerSheet(
                     val targetMs = (dragPosition * durationMs).toLong()
                     onSeekTo(targetMs)
                 },
+                thumb = {
+                    Box(
+                        modifier = Modifier
+                            .size(14.dp)
+                            .clip(CircleShape)
+                            .background(SportOrange)
+                            .border(2.dp, Color.White, CircleShape)
+                    )
+                },
                 colors = SliderDefaults.colors(
                     thumbColor = SportOrange,
                     activeTrackColor = SportOrange,
-                    inactiveTrackColor = SportCardBorder
+                    inactiveTrackColor = SportCardBorder,
+                    activeTickColor = Color.Transparent,
+                    inactiveTickColor = Color.Transparent
                 ),
                 modifier = Modifier
                     .fillMaxWidth()

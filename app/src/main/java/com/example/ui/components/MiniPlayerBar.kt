@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -98,7 +99,7 @@ fun MiniPlayerBar(
                     .padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Order / Disc Emblem
+                // Album Art or Order / Disc Emblem
                 Box(
                     modifier = Modifier
                         .size(42.dp)
@@ -107,13 +108,24 @@ fun MiniPlayerBar(
                         .border(1.dp, SportOrange.copy(alpha = 0.5f), RoundedCornerShape(10.dp)),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = if (isShuffleActive) "#$orderBadge" else "%02d".format(orderBadge),
-                        fontFamily = RajdhaniFontFamily,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 15.sp,
-                        color = SportOrange
-                    )
+                    if (!currentTrack.albumArtUri.isNullOrBlank()) {
+                        coil.compose.AsyncImage(
+                            model = currentTrack.albumArtUri,
+                            contentDescription = null,
+                            contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .clip(RoundedCornerShape(10.dp))
+                        )
+                    } else {
+                        Text(
+                            text = if (isShuffleActive) "#$orderBadge" else "%02d".format(orderBadge),
+                            fontFamily = RajdhaniFontFamily,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp,
+                            color = SportOrange
+                        )
+                    }
                 }
 
                 Spacer(modifier = Modifier.width(10.dp))
