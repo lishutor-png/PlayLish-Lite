@@ -61,6 +61,7 @@ import com.example.ui.components.EqualizerModal
 import com.example.ui.components.FullPlayerSheet
 import com.example.ui.components.MiniPlayerBar
 import com.example.ui.components.MinimalistHeader
+import com.example.ui.components.PasteLyricsDialog
 import com.example.ui.components.PlaylistModal
 import com.example.ui.components.SettingsModal
 import com.example.ui.components.SleepTimerModal
@@ -90,6 +91,18 @@ fun MainPlayerScreen(
     ) { uris ->
         if (uris.isNotEmpty()) {
             viewModel.importAudioFiles(uris)
+        }
+    }
+
+    // File Picker for importing LRC/TXT lyrics directly
+    val lyricsFilePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        uri?.let {
+            val targetTrack = uiState.trackToImportLyrics ?: uiState.currentTrack
+            if (targetTrack != null) {
+                viewModel.importLyricsFromUri(targetTrack.id, it)
+            }
         }
     }
 
@@ -383,7 +396,15 @@ fun MainPlayerScreen(
                         lyrics = uiState.currentLyrics,
                         activeLyricIndex = uiState.activeLyricIndex,
                         onSeekTo = { viewModel.seekTo(it) },
-                        onClose = { viewModel.setShowLyricsFullScreen(false) }
+                        onClose = { viewModel.setShowLyricsFullScreen(false) },
+                        onImportLyrics = {
+                            viewModel.promptImportLyrics(currentTrack)
+                            lyricsFilePickerLauncher.launch(arrayOf("text/*", "application/octet-stream", "*/*"))
+                        },
+                        onPasteLyrics = {
+                            viewModel.promptImportLyrics(currentTrack)
+                            viewModel.setShowPasteLyricsDialog(true)
+                        }
                     )
                 }
             }
@@ -615,6 +636,25 @@ fun MainPlayerScreen(
                 },
                 onDismiss = { viewModel.cancelAddToPlaylist() }
             )
+        }
+
+        // Paste / Edit Lyrics Dialog
+        if (uiState.showPasteLyricsDialog) {
+            val targetTrack = uiState.trackToImportLyrics ?: uiState.currentTrack
+            if (targetTrack != null) {
+                PasteLyricsDialog(
+                    track = targetTrack,
+                    onSaveLyrics = { rawText ->
+                        viewModel.updateTrackLyrics(targetTrack.id, rawText)
+                        viewModel.setShowPasteLyricsDialog(false)
+                        viewModel.cancelImportLyrics()
+                    },
+                    onDismiss = {
+                        viewModel.setShowPasteLyricsDialog(false)
+                        viewModel.cancelImportLyrics()
+                    }
+                )
+            }
         }
     }
 }

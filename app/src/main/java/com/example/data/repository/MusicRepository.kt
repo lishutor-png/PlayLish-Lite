@@ -82,6 +82,7 @@ class MusicRepository(private val context: Context) {
                         } else "MP3"
 
                         val isHiRes = extension in listOf("FLAC", "WAV", "ALAC", "DSD", "AIFF")
+                        val detectedLyrics = findMatchingLyricsForFilePath(filePath)
 
                         deviceTracks.add(
                             Track(
@@ -96,6 +97,7 @@ class MusicRepository(private val context: Context) {
                                 bitDepth = if (isHiRes) 24 else 16,
                                 bitrateKbps = if (isHiRes) 1411 else 320,
                                 isHiRes = isHiRes,
+                                rawLyrics = detectedLyrics,
                                 category = "Perangkat",
                                 accentColor = if (isHiRes) 0xFFFF6D00 else 0xFF00E5FF,
                                 isDeviceFile = true,
@@ -122,7 +124,7 @@ class MusicRepository(private val context: Context) {
         try {
             retriever.setDataSource(context, uri)
             val title = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE)
-                ?: uri.lastPathSegment?.substringAfterLast("/") ?: "Lagu Impor"
+                ?: uri.lastPathSegment?.substringAfterLast("/")?.substringBeforeLast(".") ?: "Lagu Impor"
             val artist = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST) ?: "Artis Impor"
             val album = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUM) ?: "Koleksi Impor"
             val durationStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
@@ -142,6 +144,7 @@ class MusicRepository(private val context: Context) {
             }
 
             val isHiRes = format in listOf("FLAC", "WAV", "ALAC", "DSD")
+            val autoLyrics = findMatchingLyricsForUri(uri, title)
 
             Track(
                 id = "imported_${System.currentTimeMillis()}_${(100..999).random()}",
@@ -155,6 +158,7 @@ class MusicRepository(private val context: Context) {
                 bitDepth = if (isHiRes) 24 else 16,
                 bitrateKbps = bitrateKbps.coerceAtLeast(128),
                 isHiRes = isHiRes,
+                rawLyrics = autoLyrics,
                 category = "Perangkat",
                 accentColor = 0xFF00E5FF,
                 isDeviceFile = true,
@@ -167,5 +171,61 @@ class MusicRepository(private val context: Context) {
                 retriever.release()
             } catch (_: Exception) {}
         }
+    }
+
+    // Auto-detect .lrc or .txt lyrics file in the same folder with the same file name
+    fun findMatchingLyricsForFilePath(filePath: String): String? {
+        if (filePath.isBlank()) return null
+        return try {
+            val baseWithoutExt = filePath.substringBeforeLast(".")
+            val candidateFiles = listOf(
+                java.io.File("$baseWithoutExt.lrc"),
+                java.io.File("$baseWithoutExt.LRC"),
+                java.io.File("$baseWithoutExt.txt"),
+                java.io.File("$baseWithoutExt.TXT")
+            )
+            val matched = candidateFiles.firstOrNull { it.exists() && it.canRead() && it.length() > 0 }
+            matched?.readText()?.takeIf { it.isNotBlank() }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    // Auto-detect lyrics from matching .lrc when imported via URI
+    fun findMatchingLyricsForUri(uri: Uri, fallbackTitle: String): String? {
+        // Try MediaStore lookup first
+        try {
+            val projection = arrayOf(MediaStore.Audio.Media.DATA)
+            context.contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val data = cursor.getString(0)
+                    if (!data.isNullOrBlank()) {
+                        val lyrics = findMatchingLyricsForFilePath(data)
+                        if (!lyrics.isNullOrBlank()) return lyrics
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+
+        // Try extracting device file path from content uri
+        try {
+            val path = uri.path ?: ""
+            val cleanPath = when {
+                path.contains("/document/primary:") -> {
+                    "/storage/emulated/0/" + path.substringAfter("/document/primary:")
+                }
+                path.startsWith("/raw:") -> {
+                    path.substringAfter("/raw:")
+                }
+                path.startsWith("/storage/") -> path
+                else -> null
+            }
+            if (cleanPath != null) {
+                val lyrics = findMatchingLyricsForFilePath(cleanPath)
+                if (!lyrics.isNullOrBlank()) return lyrics
+            }
+        } catch (_: Exception) {}
+
+        return null
     }
 }

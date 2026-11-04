@@ -66,7 +66,9 @@ data class PlayerUiState(
     val selectedPlaylistId: String? = null,
     val showPlaylistModal: Boolean = false,
     val showCreatePlaylistDialog: Boolean = false,
-    val trackToAddToPlaylist: Track? = null
+    val trackToAddToPlaylist: Track? = null,
+    val trackToImportLyrics: Track? = null,
+    val showPasteLyricsDialog: Boolean = false
 )
 
 class MusicPlayerViewModel(application: Application) : AndroidViewModel(application) {
@@ -744,6 +746,66 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
     fun clearImportStatusMessage() {
         _uiState.value = _uiState.value.copy(importStatusMessage = null)
+    }
+
+    // --- Lyrics Management (Manual Import & Paste) ---
+
+    fun promptImportLyrics(track: Track) {
+        _uiState.value = _uiState.value.copy(trackToImportLyrics = track)
+    }
+
+    fun cancelImportLyrics() {
+        _uiState.value = _uiState.value.copy(trackToImportLyrics = null)
+    }
+
+    fun setShowPasteLyricsDialog(show: Boolean) {
+        _uiState.value = _uiState.value.copy(showPasteLyricsDialog = show)
+    }
+
+    fun importLyricsFromUri(trackId: String, uri: android.net.Uri) {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                val content = getApplication<Application>().contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() } ?: ""
+                if (content.isNotBlank()) {
+                    updateTrackLyrics(trackId, content)
+                    _uiState.value = _uiState.value.copy(
+                        importStatusMessage = "Berhasil memuat lirik untuk lagu!",
+                        trackToImportLyrics = null
+                    )
+                } else {
+                    _uiState.value = _uiState.value.copy(
+                        importStatusMessage = "File lirik kosong atau tidak terbaca."
+                    )
+                }
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    importStatusMessage = "Gagal membaca file lirik: ${e.localizedMessage}"
+                )
+            }
+        }
+    }
+
+    fun updateTrackLyrics(trackId: String, rawLyrics: String) {
+        val updatedTracks = _allTracks.value.map { track ->
+            if (track.id == trackId) {
+                track.copy(rawLyrics = rawLyrics)
+            } else track
+        }
+        _allTracks.value = updatedTracks
+
+        val current = _uiState.value.currentTrack
+        if (current?.id == trackId) {
+            val parsed = LyricsParser.parse(rawLyrics)
+            _uiState.value = _uiState.value.copy(
+                currentTrack = current.copy(rawLyrics = rawLyrics),
+                currentLyrics = parsed,
+                activeLyricIndex = LyricsParser.findActiveIndex(parsed, _uiState.value.currentPositionMs)
+            )
+        }
+
+        viewModelScope.launch {
+            repository.saveTracks(updatedTracks)
+        }
     }
 
     // --- Delete / Remove Track ---

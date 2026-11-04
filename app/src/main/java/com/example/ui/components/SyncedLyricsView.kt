@@ -62,6 +62,8 @@ fun SyncedLyricsView(
     activeLyricIndex: Int,
     onSeekTo: (Long) -> Unit,
     onClose: () -> Unit,
+    onImportLyrics: () -> Unit = {},
+    onPasteLyrics: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val listState = rememberLazyListState()
@@ -112,7 +114,7 @@ fun SyncedLyricsView(
 
                     Column {
                         Text(
-                            text = "DETEKSI LIRIK OTOMATIS",
+                            text = "LIRIK TERSINKRONISASI",
                             fontFamily = RajdhaniFontFamily,
                             fontWeight = FontWeight.Bold,
                             fontSize = 14.sp,
@@ -122,29 +124,55 @@ fun SyncedLyricsView(
                             Icon(
                                 imageVector = Icons.Default.CheckCircle,
                                 contentDescription = null,
-                                tint = SportCyan,
+                                tint = if (lyrics.isNotEmpty()) SportCyan else SportOrange,
                                 modifier = Modifier.size(11.dp)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = if (lyrics.isNotEmpty()) "LRC Tersinkronisasi Aktif (Ketuk baris untuk lompat)" else "Mencari lirik...",
+                                text = if (lyrics.isNotEmpty()) "LRC Terhubung (Ketuk baris untuk lompat)" else "Belum terdeteksi",
                                 fontFamily = OutfitFontFamily,
                                 fontSize = 11.sp,
-                                color = SportCyan
+                                color = if (lyrics.isNotEmpty()) SportCyan else SportOrange
                             )
                         }
                     }
                 }
 
-                IconButton(
-                    onClick = onClose,
-                    modifier = Modifier.testTag("close_lyrics_btn")
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = "Close Lyrics",
-                        tint = TextWhite
-                    )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    // Manual Import Button in Header
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = SportCardSurface,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, SportCardBorder),
+                        modifier = Modifier
+                            .clickable { onImportLyrics() }
+                            .padding(end = 4.dp)
+                            .testTag("lyrics_header_import_btn")
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Impor .LRC",
+                                fontFamily = RajdhaniFontFamily,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 11.sp,
+                                color = SportCyan
+                            )
+                        }
+                    }
+
+                    IconButton(
+                        onClick = onClose,
+                        modifier = Modifier.testTag("close_lyrics_btn")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Close Lyrics",
+                            tint = TextWhite
+                        )
+                    }
                 }
             }
 
@@ -196,19 +224,107 @@ fun SyncedLyricsView(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Lyrics List
+            // Lyrics List or Empty Action State
             if (lyrics.isEmpty()) {
                 Box(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(bottom = 40.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = "Lirik belum tersedia untuk lagu ini.\nPlayLish Lite otomatis mendeteksi file .lrc di penyimpanan Anda.",
-                        fontFamily = OutfitFontFamily,
-                        fontSize = 13.sp,
-                        color = TextMuted,
-                        textAlign = TextAlign.Center
-                    )
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = SportCardSurface,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, SportCardBorder),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(56.dp)
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .background(SportOrangeDim),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.FormatQuote,
+                                    contentDescription = null,
+                                    tint = SportOrange,
+                                    modifier = Modifier.size(30.dp)
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(16.dp))
+
+                            Text(
+                                text = "Lirik Belum Tersedia",
+                                fontFamily = RajdhaniFontFamily,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 18.sp,
+                                color = TextWhite,
+                                textAlign = TextAlign.Center
+                            )
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            Text(
+                                text = "PlayLish Lite otomatis mencari file .lrc di folder yang sama. Jika belum terdeteksi, pilih file lirik (.lrc/.txt) secara manual atau tempel teks lirik langsung.",
+                                fontFamily = OutfitFontFamily,
+                                fontSize = 12.sp,
+                                color = TextMuted,
+                                textAlign = TextAlign.Center,
+                                lineHeight = 17.sp
+                            )
+
+                            Spacer(modifier = Modifier.height(20.dp))
+
+                            // Action 1: Manual File Picker
+                            androidx.compose.material3.Button(
+                                onClick = onImportLyrics,
+                                colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                                    containerColor = SportOrange,
+                                    contentColor = Color.Black
+                                ),
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("import_lyrics_btn")
+                            ) {
+                                Text(
+                                    text = "📂 Impor File Lirik (.LRC / .TXT)",
+                                    fontFamily = RajdhaniFontFamily,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            // Action 2: Paste Lyrics
+                            androidx.compose.material3.OutlinedButton(
+                                onClick = onPasteLyrics,
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("paste_lyrics_btn")
+                            ) {
+                                Text(
+                                    text = "✍️ Tempel Teks Lirik",
+                                    fontFamily = RajdhaniFontFamily,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp,
+                                    color = SportCyan
+                                )
+                            }
+                        }
+                    }
                 }
             } else {
                 LazyColumn(
