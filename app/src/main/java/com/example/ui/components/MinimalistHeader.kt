@@ -24,10 +24,13 @@ import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Equalizer
 import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.QueueMusic
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Shuffle
+import com.example.data.model.Playlist
+import com.example.data.model.TrackSortOption
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.FilterChip
@@ -55,6 +58,7 @@ import androidx.compose.ui.unit.sp
 import com.example.ui.theme.RajdhaniFontFamily
 import com.example.ui.theme.SportCardBorder
 import com.example.ui.theme.SportCardSurface
+import com.example.ui.theme.SportCardSurfaceVariant
 import com.example.ui.theme.SportCyan
 import com.example.ui.theme.SportCyanDim
 import com.example.ui.theme.SportLime
@@ -78,7 +82,15 @@ fun MinimalistHeader(
     onToggleSortByShuffle: () -> Unit,
     isSleepTimerActive: Boolean,
     sleepTimerSecondsRemaining: Long,
+    isWaitingForTrackEndToSleep: Boolean = false,
     loudnessNormalizationActive: Boolean,
+    playlists: List<Playlist> = emptyList(),
+    selectedPlaylistId: String? = null,
+    currentTrackSortOption: TrackSortOption = TrackSortOption.DEFAULT,
+    onOpenSortTracks: () -> Unit = {},
+    onSelectPlaylist: (String?) -> Unit,
+    onOpenPlaylistModal: () -> Unit,
+    onCreatePlaylistClick: () -> Unit,
     onOpenSleepTimer: () -> Unit,
     onOpenEqualizer: () -> Unit,
     onImportMusic: () -> Unit,
@@ -160,17 +172,22 @@ fun MinimalistHeader(
                     onClick = onOpenSleepTimer,
                     modifier = Modifier.testTag("sleep_timer_top_btn")
                 ) {
-                    if (isSleepTimerActive) {
+                    if (isSleepTimerActive || isWaitingForTrackEndToSleep) {
                         BadgedBox(
                             badge = {
-                                val mins = sleepTimerSecondsRemaining / 60
-                                val secs = sleepTimerSecondsRemaining % 60
                                 Badge(
                                     containerColor = SportOrange,
                                     contentColor = Color.Black
                                 ) {
+                                    val badgeText = if (isWaitingForTrackEndToSleep) {
+                                        "Lagu Selesai"
+                                    } else {
+                                        val mins = sleepTimerSecondsRemaining / 60
+                                        val secs = sleepTimerSecondsRemaining % 60
+                                        "%d:%02d".format(mins, secs)
+                                    }
                                     Text(
-                                        text = "%d:%02d".format(mins, secs),
+                                        text = badgeText,
                                         fontFamily = RajdhaniFontFamily,
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 10.sp
@@ -203,6 +220,35 @@ fun MinimalistHeader(
                         contentDescription = "Equalizer",
                         tint = TextWhite
                     )
+                }
+
+                // Playlist button
+                IconButton(
+                    onClick = onOpenPlaylistModal,
+                    modifier = Modifier.testTag("playlist_top_btn")
+                ) {
+                    if (selectedPlaylistId != null) {
+                        BadgedBox(
+                            badge = {
+                                Badge(
+                                    containerColor = SportOrange,
+                                    contentColor = Color.Black
+                                )
+                            }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.QueueMusic,
+                                contentDescription = "Daftar Playlist",
+                                tint = SportOrange
+                            )
+                        }
+                    } else {
+                        Icon(
+                            imageVector = Icons.Default.QueueMusic,
+                            contentDescription = "Daftar Playlist",
+                            tint = TextWhite
+                        )
+                    }
                 }
 
                 // Import Music button
@@ -268,21 +314,27 @@ fun MinimalistHeader(
 
         Spacer(modifier = Modifier.height(6.dp))
 
-        // Categories chip row
+        val activePlaylist = playlists.find { it.id == selectedPlaylistId }
+
+        // Playlist and Categories chip row
         LazyRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
-            items(categories) { category ->
-                val isSelected = category == selectedCategory
+            // "Semua Lagu" Chip
+            val isAllSelected = selectedPlaylistId == null && selectedCategory == "Semua"
+            item {
                 FilterChip(
-                    selected = isSelected,
-                    onClick = { onCategorySelected(category) },
+                    selected = isAllSelected,
+                    onClick = {
+                        onSelectPlaylist(null)
+                        onCategorySelected("Semua")
+                    },
                     label = {
                         Text(
-                            text = category,
+                            text = "Semua Lagu",
                             fontSize = 12.sp,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                            fontWeight = if (isAllSelected) FontWeight.Bold else FontWeight.Normal
                         )
                     },
                     colors = FilterChipDefaults.filterChipColors(
@@ -292,14 +344,119 @@ fun MinimalistHeader(
                         labelColor = TextMuted
                     ),
                     border = FilterChipDefaults.filterChipBorder(
-                        borderColor = if (isSelected) SportOrange else SportCardBorder,
+                        borderColor = if (isAllSelected) SportOrange else SportCardBorder,
                         selectedBorderColor = SportOrange,
+                        enabled = true,
+                        selected = isAllSelected
+                    ),
+                    shape = RoundedCornerShape(20.dp),
+                    modifier = Modifier.testTag("chip_all_tracks")
+                )
+            }
+
+            // Playlist Chips
+            items(playlists, key = { it.id }) { playlist ->
+                val isSelected = selectedPlaylistId == playlist.id
+                FilterChip(
+                    selected = isSelected,
+                    onClick = { onSelectPlaylist(playlist.id) },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.QueueMusic,
+                            contentDescription = null,
+                            tint = if (isSelected) Color.Black else SportCyan,
+                            modifier = Modifier.size(14.dp)
+                        )
+                    },
+                    label = {
+                        Text(
+                            text = "${playlist.name} (${playlist.trackIds.size})",
+                            fontSize = 12.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                        )
+                    },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = SportCyan,
+                        selectedLabelColor = Color.Black,
+                        containerColor = SportCardSurface,
+                        labelColor = TextWhite
+                    ),
+                    border = FilterChipDefaults.filterChipBorder(
+                        borderColor = if (isSelected) SportCyan else SportCardBorder,
+                        selectedBorderColor = SportCyan,
                         enabled = true,
                         selected = isSelected
                     ),
                     shape = RoundedCornerShape(20.dp),
-                    modifier = Modifier.testTag("category_chip_$category")
+                    modifier = Modifier.testTag("chip_playlist_${playlist.id}")
                 )
+            }
+
+            // "+ Buat Playlist" Chip
+            item {
+                Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    color = Color.Transparent,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, SportOrange.copy(alpha = 0.5f)),
+                    modifier = Modifier
+                        .clickable { onCreatePlaylistClick() }
+                        .testTag("chip_create_playlist")
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = null,
+                            tint = SportOrange,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "Playlist",
+                            fontSize = 12.sp,
+                            fontFamily = RajdhaniFontFamily,
+                            fontWeight = FontWeight.Bold,
+                            color = SportOrange
+                        )
+                    }
+                }
+            }
+
+            // Category Chips (Hi-Res, Perangkat)
+            listOf("Hi-Res", "Perangkat").forEach { category ->
+                val isSelected = selectedPlaylistId == null && selectedCategory == category
+                item {
+                    FilterChip(
+                        selected = isSelected,
+                        onClick = {
+                            onSelectPlaylist(null)
+                            onCategorySelected(category)
+                        },
+                        label = {
+                            Text(
+                                text = category,
+                                fontSize = 12.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                            )
+                        },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = SportOrange,
+                            selectedLabelColor = Color.Black,
+                            containerColor = SportCardSurface,
+                            labelColor = TextMuted
+                        ),
+                        border = FilterChipDefaults.filterChipBorder(
+                            borderColor = if (isSelected) SportOrange else SportCardBorder,
+                            selectedBorderColor = SportOrange,
+                            enabled = true,
+                            selected = isSelected
+                        ),
+                        shape = RoundedCornerShape(20.dp),
+                        modifier = Modifier.testTag("category_chip_$category")
+                    )
+                }
             }
         }
 
@@ -318,7 +475,7 @@ fun MinimalistHeader(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Shuffle Status Indicator
+                // Shuffle Status Indicator & Active Playlist
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.clickable { onToggleShuffle() }
@@ -341,21 +498,26 @@ fun MinimalistHeader(
                     Spacer(modifier = Modifier.width(8.dp))
 
                     Column {
+                        val headerLabel = if (activePlaylist != null) {
+                            "PLAYLIST: ${activePlaylist.name.uppercase()}"
+                        } else if (isShuffleActive) {
+                            "MODE ACAK BERURUTAN"
+                        } else {
+                            "URUTAN NORMAL"
+                        }
                         Text(
-                            text = if (isShuffleActive) "MODE ACAK BERURUTAN" else "URUTAN NORMAL",
+                            text = headerLabel,
                             fontFamily = RajdhaniFontFamily,
                             fontWeight = FontWeight.Bold,
                             fontSize = 12.sp,
-                            color = if (isShuffleActive) SportOrange else TextMuted
+                            color = if (activePlaylist != null) SportCyan else if (isShuffleActive) SportOrange else TextMuted
                         )
-                        if (isShuffleActive) {
-                            Text(
-                                text = "Lagu #$currentQueuePos dari $totalQueueCount",
-                                fontFamily = RajdhaniFontFamily,
-                                fontSize = 11.sp,
-                                color = SportCyan
-                            )
-                        }
+                        Text(
+                            text = if (totalQueueCount > 0) "Lagu #$currentQueuePos dari $totalQueueCount" else "0 lagu dalam antrean",
+                            fontFamily = RajdhaniFontFamily,
+                            fontSize = 11.sp,
+                            color = if (isShuffleActive) SportCyan else TextMuted
+                        )
                     }
                 }
 
@@ -404,19 +566,32 @@ fun MinimalistHeader(
                         }
 
                         Spacer(modifier = Modifier.width(6.dp))
+                    }
 
-                        // Toggle sort by shuffle order
-                        IconButton(
-                            onClick = onToggleSortByShuffle,
-                            modifier = Modifier.size(28.dp).testTag("sort_queue_btn")
-                        ) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.Sort,
-                                contentDescription = "Urutkan Antrean",
-                                tint = if (sortByShuffle) SportCyan else TextMuted,
-                                modifier = Modifier.size(16.dp)
-                            )
-                        }
+                    // Sort Button (Open SortTracksDialog)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(if (currentTrackSortOption != TrackSortOption.DEFAULT) SportCyan.copy(alpha = 0.2f) else SportCardSurfaceVariant)
+                            .clickable { onOpenSortTracks() }
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                            .testTag("sort_tracks_top_btn")
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.Sort,
+                            contentDescription = "Urutkan Lagu",
+                            tint = if (currentTrackSortOption != TrackSortOption.DEFAULT) SportCyan else TextMuted,
+                            modifier = Modifier.size(13.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = if (currentTrackSortOption != TrackSortOption.DEFAULT) currentTrackSortOption.displayName else "Sortir",
+                            fontFamily = RajdhaniFontFamily,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 11.sp,
+                            color = if (currentTrackSortOption != TrackSortOption.DEFAULT) SportCyan else TextWhite
+                        )
                     }
                 }
             }

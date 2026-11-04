@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.PlaylistAdd
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -59,6 +60,7 @@ fun TrackCard(
     isShuffleActive: Boolean,
     isCurrentlyPlaying: Boolean,
     onTrackClick: () -> Unit,
+    onAddToPlaylistClick: (() -> Unit)? = null,
     onDeleteClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
@@ -176,8 +178,25 @@ fun TrackCard(
                     color = if (isCurrentlyPlaying) SportOrange else TextMuted
                 )
 
+                if (onAddToPlaylistClick != null) {
+                    Spacer(modifier = Modifier.width(2.dp))
+                    IconButton(
+                        onClick = onAddToPlaylistClick,
+                        modifier = Modifier
+                            .size(34.dp)
+                            .testTag("add_to_playlist_${track.id}")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.PlaylistAdd,
+                            contentDescription = "Tambah ke Playlist",
+                            tint = SportCyan.copy(alpha = 0.8f),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+
                 if (onDeleteClick != null) {
-                    Spacer(modifier = Modifier.width(4.dp))
+                    Spacer(modifier = Modifier.width(2.dp))
                     IconButton(
                         onClick = onDeleteClick,
                         modifier = Modifier

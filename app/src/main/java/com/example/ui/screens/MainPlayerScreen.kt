@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -21,11 +22,18 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.MusicOff
+import androidx.compose.material.icons.filled.QueueMusic
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -35,24 +43,33 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.ui.components.AddToPlaylistDialog
+import com.example.ui.components.CreatePlaylistDialog
 import com.example.ui.components.EqualizerModal
 import com.example.ui.components.FullPlayerSheet
 import com.example.ui.components.MiniPlayerBar
 import com.example.ui.components.MinimalistHeader
+import com.example.ui.components.PlaylistModal
 import com.example.ui.components.SettingsModal
 import com.example.ui.components.SleepTimerModal
+import com.example.ui.components.SortTracksDialog
 import com.example.ui.components.SyncedLyricsView
 import com.example.ui.components.TrackCard
 import com.example.ui.theme.OutfitFontFamily
 import com.example.ui.theme.RajdhaniFontFamily
+import com.example.ui.theme.SportCyan
 import com.example.ui.theme.SportOrange
 import com.example.ui.theme.TextMuted
 import com.example.ui.theme.TextWhite
@@ -132,7 +149,15 @@ fun MainPlayerScreen(
                     onToggleSortByShuffle = { viewModel.toggleSortQueueByShuffle() },
                     isSleepTimerActive = uiState.isSleepTimerActive,
                     sleepTimerSecondsRemaining = uiState.sleepTimerRemainingSeconds,
+                    isWaitingForTrackEndToSleep = uiState.isWaitingForTrackEndToSleep,
                     loudnessNormalizationActive = uiState.loudnessNormalizationActive,
+                    playlists = uiState.playlists,
+                    selectedPlaylistId = uiState.selectedPlaylistId,
+                    currentTrackSortOption = uiState.trackSortOption,
+                    onOpenSortTracks = { viewModel.setShowSortDialog(true) },
+                    onSelectPlaylist = { viewModel.selectPlaylist(it) },
+                    onOpenPlaylistModal = { viewModel.setShowPlaylistModal(true) },
+                    onCreatePlaylistClick = { viewModel.setShowCreatePlaylistDialog(true) },
                     onOpenSleepTimer = { viewModel.setShowSleepTimerDialog(true) },
                     onOpenEqualizer = { viewModel.setShowEqualizerDialog(true) },
                     onImportMusic = { filePickerLauncher.launch(arrayOf("audio/*")) },
@@ -149,44 +174,106 @@ fun MainPlayerScreen(
                     ) {
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
-                            modifier = Modifier.padding(24.dp)
+                            modifier = Modifier.padding(28.dp)
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.MusicOff,
-                                contentDescription = null,
-                                tint = TextMuted,
-                                modifier = Modifier.size(48.dp)
-                            )
-                            Spacer(modifier = Modifier.height(12.dp))
+                            Box(
+                                modifier = Modifier
+                                    .size(64.dp)
+                                    .clip(CircleShape)
+                                    .background(SportCyan.copy(alpha = 0.12f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = if (uiState.selectedPlaylistId != null) Icons.Default.QueueMusic else Icons.Default.MusicOff,
+                                    contentDescription = null,
+                                    tint = if (uiState.selectedPlaylistId != null) SportCyan else SportOrange,
+                                    modifier = Modifier.size(32.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(16.dp))
                             Text(
-                                text = "Tidak ada lagu yang cocok",
-                                fontFamily = OutfitFontFamily,
+                                text = if (uiState.selectedPlaylistId != null) {
+                                    val plName = uiState.playlists.find { it.id == uiState.selectedPlaylistId }?.name ?: "Playlist"
+                                    "Playlist \"$plName\" Masih Kosong"
+                                } else if (uiState.searchQuery.isNotBlank()) {
+                                    "Tidak ada lagu cocok dengan \"${uiState.searchQuery}\""
+                                } else {
+                                    "Belum Ada Lagu di Perpustakaan"
+                                },
+                                fontFamily = RajdhaniFontFamily,
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 16.sp,
-                                color = TextMuted
+                                fontSize = 18.sp,
+                                color = TextWhite,
+                                textAlign = TextAlign.Center
                             )
-                            Spacer(modifier = Modifier.height(4.dp))
+                            Spacer(modifier = Modifier.height(6.dp))
                             Text(
-                                text = "Pindai musik dari penyimpanan perangkat atau pilih kategori lain.",
+                                text = if (uiState.selectedPlaylistId != null) {
+                                    "Impor musik audio langsung ke playlist ini atau tambahkan dari daftar lagu Anda."
+                                } else {
+                                    "Semua musik bawaan telah dibersihkan. Impor file MP3/WAV/FLAC favoritmu atau pindai penyimpanan perangkat."
+                                },
                                 fontFamily = OutfitFontFamily,
                                 fontSize = 12.sp,
                                 color = TextMuted,
                                 textAlign = TextAlign.Center
                             )
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Button(
-                                onClick = { requestStoragePermissionAndScan() },
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = SportOrange,
-                                    contentColor = Color.Black
-                                ),
-                                shape = RoundedCornerShape(8.dp)
+                            Spacer(modifier = Modifier.height(20.dp))
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(
-                                    text = "Pindai File Perangkat",
-                                    fontFamily = RajdhaniFontFamily,
-                                    fontWeight = FontWeight.Bold
-                                )
+                                Button(
+                                    onClick = { filePickerLauncher.launch(arrayOf("audio/*")) },
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = SportOrange,
+                                        contentColor = Color.Black
+                                    ),
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier.testTag("empty_state_import_btn")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Add,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "Impor Lagu",
+                                        fontFamily = RajdhaniFontFamily,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 13.sp
+                                    )
+                                }
+
+                                if (uiState.selectedPlaylistId != null) {
+                                    androidx.compose.material3.OutlinedButton(
+                                        onClick = { viewModel.selectPlaylist(null) },
+                                        shape = RoundedCornerShape(10.dp)
+                                    ) {
+                                        Text(
+                                            text = "Semua Lagu",
+                                            fontFamily = RajdhaniFontFamily,
+                                            fontWeight = FontWeight.Bold,
+                                            color = TextWhite,
+                                            fontSize = 13.sp
+                                        )
+                                    }
+                                } else {
+                                    androidx.compose.material3.OutlinedButton(
+                                        onClick = { requestStoragePermissionAndScan() },
+                                        shape = RoundedCornerShape(10.dp),
+                                        modifier = Modifier.testTag("empty_state_scan_btn")
+                                    ) {
+                                        Text(
+                                            text = "Pindai File HP",
+                                            fontFamily = RajdhaniFontFamily,
+                                            fontWeight = FontWeight.Bold,
+                                            color = SportCyan,
+                                            fontSize = 13.sp
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -214,6 +301,7 @@ fun MainPlayerScreen(
                                 isShuffleActive = uiState.isShuffleEnabled,
                                 isCurrentlyPlaying = isPlaying,
                                 onTrackClick = { viewModel.playTrack(track) },
+                                onAddToPlaylistClick = { viewModel.promptAddToPlaylist(track) },
                                 onDeleteClick = { viewModel.promptDeleteTrack(track) }
                             )
                         }
@@ -239,6 +327,7 @@ fun MainPlayerScreen(
                         isShuffleActive = uiState.isShuffleEnabled,
                         isSleepTimerActive = uiState.isSleepTimerActive,
                         sleepTimerSecondsRemaining = uiState.sleepTimerRemainingSeconds,
+                        isWaitingForTrackEndToSleep = uiState.isWaitingForTrackEndToSleep,
                         currentDecibels = uiState.currentDecibels,
                         onTogglePlayPause = { viewModel.togglePlayPause() },
                         onPlayNext = { viewModel.playNext() },
@@ -265,6 +354,7 @@ fun MainPlayerScreen(
                     currentDecibels = uiState.currentDecibels,
                     isSleepTimerActive = uiState.isSleepTimerActive,
                     sleepTimerRemainingSeconds = uiState.sleepTimerRemainingSeconds,
+                    isWaitingForTrackEndToSleep = uiState.isWaitingForTrackEndToSleep,
                     loudnessNormalizationActive = uiState.loudnessNormalizationActive,
                     appliedGainDb = uiState.appliedNormalizationGainDb,
                     onTogglePlayPause = { viewModel.togglePlayPause() },
@@ -421,6 +511,109 @@ fun MainPlayerScreen(
                 },
                 containerColor = com.example.ui.theme.SportCardSurface,
                 shape = RoundedCornerShape(16.dp)
+            )
+        }
+
+        // Playlist Overview Modal
+        if (uiState.showPlaylistModal) {
+            val allTracksList by viewModel.allTracks.collectAsState()
+            PlaylistModal(
+                playlists = viewModel.getSortedPlaylists(),
+                selectedPlaylistId = uiState.selectedPlaylistId,
+                totalAllTracksCount = allTracksList.size,
+                playlistSortOption = uiState.playlistSortOption,
+                onPlaylistSortOptionChanged = { viewModel.setPlaylistSortOption(it) },
+                onSelectPlaylist = { viewModel.selectPlaylist(it) },
+                onCreatePlaylistClick = {
+                    viewModel.setShowPlaylistModal(false)
+                    viewModel.setShowCreatePlaylistDialog(true)
+                },
+                onPromptDeletePlaylist = { viewModel.promptDeletePlaylist(it) },
+                onDismiss = { viewModel.setShowPlaylistModal(false) }
+            )
+        }
+
+        // Sort Tracks Dialog
+        if (uiState.showSortDialog) {
+            SortTracksDialog(
+                currentSortOption = uiState.trackSortOption,
+                onSortOptionSelected = { viewModel.setTrackSortOption(it) },
+                onDismiss = { viewModel.setShowSortDialog(false) }
+            )
+        }
+
+        // Delete Playlist Confirmation Dialog
+        if (uiState.playlistToDelete != null) {
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { viewModel.cancelDeletePlaylist() },
+                title = {
+                    Text(
+                        text = "Hapus Playlist?",
+                        fontFamily = RajdhaniFontFamily,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp,
+                        color = TextWhite
+                    )
+                },
+                text = {
+                    Text(
+                        text = "Apakah Anda yakin ingin menghapus playlist \"${uiState.playlistToDelete?.name}\"? Lagu-lagu di dalamnya tetap aman di perpustakaan musik Anda.",
+                        fontFamily = OutfitFontFamily,
+                        fontSize = 13.sp,
+                        color = TextMuted
+                    )
+                },
+                confirmButton = {
+                    Button(
+                        onClick = { viewModel.confirmDeletePlaylist() },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = com.example.ui.theme.SportRed,
+                            contentColor = Color.White
+                        ),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text("Hapus", fontFamily = RajdhaniFontFamily, fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    androidx.compose.material3.OutlinedButton(
+                        onClick = { viewModel.cancelDeletePlaylist() },
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text("Batal", fontFamily = RajdhaniFontFamily, color = TextWhite)
+                    }
+                },
+                containerColor = com.example.ui.theme.SportCardSurface,
+                shape = RoundedCornerShape(16.dp)
+            )
+        }
+
+        // Create Playlist Dialog
+        if (uiState.showCreatePlaylistDialog) {
+            CreatePlaylistDialog(
+                onConfirm = { name, desc ->
+                    viewModel.createPlaylist(name, desc)
+                },
+                onDismiss = { viewModel.setShowCreatePlaylistDialog(false) }
+            )
+        }
+
+        // Add Track To Playlist Dialog
+        uiState.trackToAddToPlaylist?.let { track ->
+            AddToPlaylistDialog(
+                track = track,
+                playlists = uiState.playlists,
+                onAddToPlaylist = { playlistId ->
+                    viewModel.addTrackToPlaylist(track.id, playlistId)
+                },
+                onRemoveFromPlaylist = { playlistId ->
+                    viewModel.removeTrackFromPlaylist(track.id, playlistId)
+                },
+                onCreateNewPlaylist = {
+                    viewModel.cancelAddToPlaylist()
+                    viewModel.setShowCreatePlaylistDialog(true)
+                },
+                onDismiss = { viewModel.cancelAddToPlaylist() }
             )
         }
     }

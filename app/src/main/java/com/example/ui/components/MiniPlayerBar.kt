@@ -58,6 +58,7 @@ fun MiniPlayerBar(
     isShuffleActive: Boolean,
     isSleepTimerActive: Boolean,
     sleepTimerSecondsRemaining: Long,
+    isWaitingForTrackEndToSleep: Boolean = false,
     currentDecibels: Float,
     onTogglePlayPause: () -> Unit,
     onPlayNext: () -> Unit,
@@ -133,10 +134,11 @@ fun MiniPlayerBar(
 
                         Spacer(modifier = Modifier.width(6.dp))
 
-                        // Live Sleep Timer badge if active
-                        AnimatedVisibility(visible = isSleepTimerActive) {
+                        // Live Sleep Timer badge if active or waiting for track end
+                        AnimatedVisibility(visible = isSleepTimerActive || isWaitingForTrackEndToSleep) {
                             val mins = sleepTimerSecondsRemaining / 60
                             val secs = sleepTimerSecondsRemaining % 60
+                            val badgeText = if (isWaitingForTrackEndToSleep) "Lagu Akhir" else "%d:%02d".format(mins, secs)
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 modifier = Modifier
@@ -152,7 +154,7 @@ fun MiniPlayerBar(
                                 )
                                 Spacer(modifier = Modifier.width(2.dp))
                                 Text(
-                                    text = "%d:%02d".format(mins, secs),
+                                    text = badgeText,
                                     fontFamily = RajdhaniFontFamily,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 10.sp,

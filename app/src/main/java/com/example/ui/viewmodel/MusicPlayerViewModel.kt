@@ -7,7 +7,10 @@ import com.example.audio.AudioPlayerEngine
 import com.example.audio.OrderedShuffleQueue
 import com.example.data.model.LyricLine
 import com.example.data.model.LyricsParser
+import com.example.data.model.Playlist
+import com.example.data.model.PlaylistSortOption
 import com.example.data.model.Track
+import com.example.data.model.TrackSortOption
 import com.example.data.model.UserSettings
 import com.example.data.preferences.SettingsDataStore
 import com.example.data.repository.MusicRepository
@@ -39,21 +42,31 @@ data class PlayerUiState(
     val activeLyricIndex: Int = -1,
     val isSleepTimerActive: Boolean = false,
     val sleepTimerRemainingSeconds: Long = 0L,
+    val isWaitingForTrackEndToSleep: Boolean = false,
     val currentDecibels: Float = -12.0f,
     val effectiveVolumePercent: Int = 75,
     val selectedCategory: String = "Semua",
     val searchQuery: String = "",
     val sortQueueByShuffleOrder: Boolean = false,
+    val trackSortOption: TrackSortOption = TrackSortOption.DEFAULT,
+    val playlistSortOption: PlaylistSortOption = PlaylistSortOption.DATE_NEWEST,
     val isScanningDevice: Boolean = false,
     val isFullPlayerOpen: Boolean = false,
     val showSleepTimerDialog: Boolean = false,
     val showEqualizerDialog: Boolean = false,
     val showSettingsDialog: Boolean = false,
     val showLyricsFullScreen: Boolean = false,
+    val showSortDialog: Boolean = false,
     val loudnessNormalizationActive: Boolean = true,
     val appliedNormalizationGainDb: Float = 0.0f,
     val trackToDelete: Track? = null,
-    val importStatusMessage: String? = null
+    val playlistToDelete: Playlist? = null,
+    val importStatusMessage: String? = null,
+    val playlists: List<Playlist> = emptyList(),
+    val selectedPlaylistId: String? = null,
+    val showPlaylistModal: Boolean = false,
+    val showCreatePlaylistDialog: Boolean = false,
+    val trackToAddToPlaylist: Track? = null
 )
 
 class MusicPlayerViewModel(application: Application) : AndroidViewModel(application) {
@@ -90,19 +103,25 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     private fun loadInitialTracks() {
-        val samples = repository.getSampleTracks()
-        _allTracks.value = samples
-        syncQueueWithFilteredTracks()
-
-        // Set initial track
-        if (samples.isNotEmpty()) {
-            val initialTrack = samples.first()
+        viewModelScope.launch {
+            val savedTracks = repository.getSavedTracks()
+            val savedPlaylists = repository.getPlaylists()
+            _allTracks.value = savedTracks
             _uiState.value = _uiState.value.copy(
-                currentTrack = initialTrack,
-                durationMs = initialTrack.durationMs,
-                currentLyrics = LyricsParser.parse(initialTrack.rawLyrics),
-                totalQueueCount = samples.size
+                playlists = savedPlaylists
             )
+            syncQueueWithFilteredTracks()
+
+            // Set initial track if user already has saved tracks
+            if (savedTracks.isNotEmpty()) {
+                val initialTrack = savedTracks.first()
+                _uiState.value = _uiState.value.copy(
+                    currentTrack = initialTrack,
+                    durationMs = initialTrack.durationMs,
+                    currentLyrics = LyricsParser.parse(initialTrack.rawLyrics),
+                    totalQueueCount = savedTracks.size
+                )
+            }
         }
     }
 
@@ -167,6 +186,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     fun getFilteredTracks(): List<Track> {
         val category = _uiState.value.selectedCategory
         val query = _uiState.value.searchQuery.trim().lowercase()
+        val selectedPlId = _uiState.value.selectedPlaylistId
 
         var filtered = _allTracks.value.filter { track ->
             when (category) {
@@ -179,6 +199,13 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             }
         }
 
+        // Filter by selected playlist
+        if (selectedPlId != null) {
+            val playlist = _uiState.value.playlists.find { it.id == selectedPlId }
+            val allowedIds = playlist?.trackIds?.toSet() ?: emptySet()
+            filtered = filtered.filter { it.id in allowedIds }
+        }
+
         if (query.isNotEmpty()) {
             filtered = filtered.filter {
                 it.title.lowercase().contains(query) ||
@@ -187,8 +214,22 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             }
         }
 
-        if (_uiState.value.sortQueueByShuffleOrder && _uiState.value.isShuffleEnabled) {
-            filtered = filtered.sortedBy { shuffleQueue.getOrderBadge(it.id) }
+        filtered = when (_uiState.value.trackSortOption) {
+            TrackSortOption.DEFAULT -> {
+                if (_uiState.value.sortQueueByShuffleOrder && _uiState.value.isShuffleEnabled) {
+                    filtered.sortedBy { shuffleQueue.getOrderBadge(it.id) }
+                } else filtered
+            }
+            TrackSortOption.TITLE_ASC -> filtered.sortedBy { it.title.lowercase() }
+            TrackSortOption.TITLE_DESC -> filtered.sortedByDescending { it.title.lowercase() }
+            TrackSortOption.ARTIST_ASC -> filtered.sortedBy { it.artist.lowercase() }
+            TrackSortOption.DURATION_DESC -> filtered.sortedByDescending { it.durationMs }
+            TrackSortOption.DURATION_ASC -> filtered.sortedBy { it.durationMs }
+            TrackSortOption.SHUFFLE_ORDER -> {
+                if (_uiState.value.isShuffleEnabled) {
+                    filtered.sortedBy { shuffleQueue.getOrderBadge(it.id) }
+                } else filtered
+            }
         }
 
         return filtered
@@ -390,6 +431,10 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             if (finishCurrentSong && _uiState.value.isPlaying) {
                 // Wait for the currently playing song to conclude before sleeping
                 waitingForTrackToEndToSleep = true
+                _uiState.value = _uiState.value.copy(
+                    isWaitingForTrackEndToSleep = true,
+                    sleepTimerRemainingSeconds = 0L
+                )
             } else {
                 stopAndSleep()
             }
@@ -403,6 +448,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         audioEngine.setFadeMultiplier(1.0f)
         _uiState.value = _uiState.value.copy(
             isSleepTimerActive = false,
+            isWaitingForTrackEndToSleep = false,
             sleepTimerRemainingSeconds = 0L
         )
     }
@@ -410,8 +456,10 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     private fun stopAndSleep() {
         pause()
         audioEngine.setFadeMultiplier(1.0f)
+        waitingForTrackToEndToSleep = false
         _uiState.value = _uiState.value.copy(
             isSleepTimerActive = false,
+            isWaitingForTrackEndToSleep = false,
             sleepTimerRemainingSeconds = 0L
         )
     }
@@ -465,8 +513,30 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isScanningDevice = true)
             val deviceFiles = repository.queryDeviceAudio()
-            val currentSamples = repository.getSampleTracks()
-            _allTracks.value = currentSamples + deviceFiles
+            if (deviceFiles.isNotEmpty()) {
+                val existingIds = _allTracks.value.map { it.id }.toSet()
+                val newTracks = deviceFiles.filter { it.id !in existingIds }
+                val updated = _allTracks.value + newTracks
+                _allTracks.value = updated
+                repository.saveTracks(updated)
+
+                if (_uiState.value.currentTrack == null && updated.isNotEmpty()) {
+                    val first = updated.first()
+                    _uiState.value = _uiState.value.copy(
+                        currentTrack = first,
+                        durationMs = first.durationMs,
+                        currentLyrics = LyricsParser.parse(first.rawLyrics)
+                    )
+                }
+
+                _uiState.value = _uiState.value.copy(
+                    importStatusMessage = "Berhasil menambahkan ${newTracks.size} lagu dari perangkat!"
+                )
+            } else {
+                _uiState.value = _uiState.value.copy(
+                    importStatusMessage = "Tidak ditemukan file audio baru di penyimpanan."
+                )
+            }
             _uiState.value = _uiState.value.copy(isScanningDevice = false)
             syncQueueWithFilteredTracks()
         }
@@ -498,6 +568,133 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         _uiState.value = _uiState.value.copy(showLyricsFullScreen = show)
     }
 
+    // --- Playlist Management ---
+
+    fun selectPlaylist(playlistId: String?) {
+        _uiState.value = _uiState.value.copy(selectedPlaylistId = playlistId)
+        syncQueueWithFilteredTracks()
+    }
+
+    fun createPlaylist(name: String, description: String = "") {
+        if (name.isBlank()) return
+        val newPl = Playlist(
+            id = "pl_${System.currentTimeMillis()}",
+            name = name.trim(),
+            description = description.trim(),
+            trackIds = emptyList()
+        )
+        val updated = _uiState.value.playlists + newPl
+        _uiState.value = _uiState.value.copy(
+            playlists = updated,
+            showCreatePlaylistDialog = false,
+            selectedPlaylistId = newPl.id
+        )
+        viewModelScope.launch {
+            repository.savePlaylists(updated)
+        }
+        syncQueueWithFilteredTracks()
+    }
+
+    fun deletePlaylist(playlistId: String) {
+        val updated = _uiState.value.playlists.filter { it.id != playlistId }
+        val newSelected = if (_uiState.value.selectedPlaylistId == playlistId) null else _uiState.value.selectedPlaylistId
+        _uiState.value = _uiState.value.copy(
+            playlists = updated,
+            selectedPlaylistId = newSelected
+        )
+        viewModelScope.launch {
+            repository.savePlaylists(updated)
+        }
+        syncQueueWithFilteredTracks()
+    }
+
+    fun addTrackToPlaylist(trackId: String, playlistId: String) {
+        val updated = _uiState.value.playlists.map { pl ->
+            if (pl.id == playlistId) {
+                if (!pl.trackIds.contains(trackId)) {
+                    pl.copy(trackIds = pl.trackIds + trackId)
+                } else pl
+            } else pl
+        }
+        _uiState.value = _uiState.value.copy(
+            playlists = updated,
+            trackToAddToPlaylist = null
+        )
+        viewModelScope.launch {
+            repository.savePlaylists(updated)
+        }
+        syncQueueWithFilteredTracks()
+    }
+
+    fun removeTrackFromPlaylist(trackId: String, playlistId: String) {
+        val updated = _uiState.value.playlists.map { pl ->
+            if (pl.id == playlistId) {
+                pl.copy(trackIds = pl.trackIds.filter { it != trackId })
+            } else pl
+        }
+        _uiState.value = _uiState.value.copy(playlists = updated)
+        viewModelScope.launch {
+            repository.savePlaylists(updated)
+        }
+        syncQueueWithFilteredTracks()
+    }
+
+    fun promptAddToPlaylist(track: Track) {
+        _uiState.value = _uiState.value.copy(trackToAddToPlaylist = track)
+    }
+
+    fun cancelAddToPlaylist() {
+        _uiState.value = _uiState.value.copy(trackToAddToPlaylist = null)
+    }
+
+    fun setShowPlaylistModal(show: Boolean) {
+        _uiState.value = _uiState.value.copy(showPlaylistModal = show)
+    }
+
+    fun setShowCreatePlaylistDialog(show: Boolean) {
+        _uiState.value = _uiState.value.copy(showCreatePlaylistDialog = show)
+    }
+
+    // --- Playlist & Track Sorting & Management ---
+
+    fun setTrackSortOption(option: TrackSortOption) {
+        _uiState.value = _uiState.value.copy(trackSortOption = option)
+        syncQueueWithFilteredTracks()
+    }
+
+    fun setPlaylistSortOption(option: PlaylistSortOption) {
+        _uiState.value = _uiState.value.copy(playlistSortOption = option)
+    }
+
+    fun setShowSortDialog(show: Boolean) {
+        _uiState.value = _uiState.value.copy(showSortDialog = show)
+    }
+
+    fun promptDeletePlaylist(playlist: Playlist) {
+        _uiState.value = _uiState.value.copy(playlistToDelete = playlist)
+    }
+
+    fun cancelDeletePlaylist() {
+        _uiState.value = _uiState.value.copy(playlistToDelete = null)
+    }
+
+    fun confirmDeletePlaylist() {
+        val pl = _uiState.value.playlistToDelete ?: return
+        deletePlaylist(pl.id)
+        _uiState.value = _uiState.value.copy(playlistToDelete = null)
+    }
+
+    fun getSortedPlaylists(): List<Playlist> {
+        val list = _uiState.value.playlists
+        return when (_uiState.value.playlistSortOption) {
+            PlaylistSortOption.NAME_ASC -> list.sortedBy { it.name.lowercase() }
+            PlaylistSortOption.NAME_DESC -> list.sortedByDescending { it.name.lowercase() }
+            PlaylistSortOption.TRACKS_COUNT_DESC -> list.sortedByDescending { it.trackIds.size }
+            PlaylistSortOption.DATE_NEWEST -> list.sortedByDescending { it.createdAtEpoch }
+            PlaylistSortOption.DATE_OLDEST -> list.sortedBy { it.createdAtEpoch }
+        }
+    }
+
     // --- Import Audio Files ---
     fun importAudioFiles(uris: List<android.net.Uri>) {
         if (uris.isEmpty()) return
@@ -510,10 +707,36 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 }
             }
             if (newlyImported.isNotEmpty()) {
-                _allTracks.value = _allTracks.value + newlyImported
+                val updated = _allTracks.value + newlyImported
+                _allTracks.value = updated
+                repository.saveTracks(updated)
+
+                // If a playlist is selected, add imported songs directly to it
+                val currentPlId = _uiState.value.selectedPlaylistId
+                if (currentPlId != null) {
+                    val updatedPlaylists = _uiState.value.playlists.map { pl ->
+                        if (pl.id == currentPlId) {
+                            pl.copy(trackIds = (pl.trackIds + newlyImported.map { it.id }).distinct())
+                        } else pl
+                    }
+                    _uiState.value = _uiState.value.copy(playlists = updatedPlaylists)
+                    repository.savePlaylists(updatedPlaylists)
+                }
+
                 syncQueueWithFilteredTracks()
+
+                // If currently no track was loaded, set the first imported track
+                if (_uiState.value.currentTrack == null && updated.isNotEmpty()) {
+                    val first = updated.first()
+                    _uiState.value = _uiState.value.copy(
+                        currentTrack = first,
+                        durationMs = first.durationMs,
+                        currentLyrics = LyricsParser.parse(first.rawLyrics)
+                    )
+                }
+
                 _uiState.value = _uiState.value.copy(
-                    importStatusMessage = "Berhasil mengimpor ${newlyImported.size} lagu!"
+                    importStatusMessage = "Berhasil mengimpor ${newlyImported.size} lagu ke PlayLish Lite!"
                 )
             }
         }
@@ -539,10 +762,25 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
         val updatedList = _allTracks.value.filter { it.id != track.id }
         _allTracks.value = updatedList
-        _uiState.value = _uiState.value.copy(trackToDelete = null)
+
+        // Remove track ID from all playlists
+        val updatedPlaylists = _uiState.value.playlists.map { pl ->
+            pl.copy(trackIds = pl.trackIds.filter { it != track.id })
+        }
+
+        _uiState.value = _uiState.value.copy(
+            trackToDelete = null,
+            playlists = updatedPlaylists
+        )
+
+        viewModelScope.launch {
+            repository.saveTracks(updatedList)
+            repository.savePlaylists(updatedPlaylists)
+        }
 
         if (isDeletingCurrent) {
-            if (updatedList.isNotEmpty()) {
+            val remainingFiltered = getFilteredTracks()
+            if (remainingFiltered.isNotEmpty()) {
                 playNext()
             } else {
                 audioEngine.stop()

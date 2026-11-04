@@ -96,6 +96,7 @@ fun FullPlayerSheet(
     currentDecibels: Float,
     isSleepTimerActive: Boolean,
     sleepTimerRemainingSeconds: Long,
+    isWaitingForTrackEndToSleep: Boolean = false,
     loudnessNormalizationActive: Boolean = true,
     appliedGainDb: Float = 0.0f,
     onTogglePlayPause: () -> Unit,
@@ -189,9 +190,10 @@ fun FullPlayerSheet(
                         onClick = onOpenSleepTimer,
                         modifier = Modifier.testTag("full_player_sleep_btn")
                     ) {
-                        if (isSleepTimerActive) {
+                        if (isSleepTimerActive || isWaitingForTrackEndToSleep) {
                             val mins = sleepTimerRemainingSeconds / 60
                             val secs = sleepTimerRemainingSeconds % 60
+                            val badgeText = if (isWaitingForTrackEndToSleep) "Lagu Akhir" else "%d:%02d".format(mins, secs)
                             BadgedBox(
                                 badge = {
                                     Badge(
@@ -199,7 +201,7 @@ fun FullPlayerSheet(
                                         contentColor = Color.Black
                                     ) {
                                         Text(
-                                            text = "%d:%02d".format(mins, secs),
+                                            text = badgeText,
                                             fontFamily = RajdhaniFontFamily,
                                             fontWeight = FontWeight.Bold,
                                             fontSize = 9.sp
@@ -471,6 +473,37 @@ fun FullPlayerSheet(
                                 color = SportOrange
                             )
                         }
+                    }
+                }
+            }
+
+            if (isWaitingForTrackEndToSleep) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = SportOrange.copy(alpha = 0.15f),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, SportOrange),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Bedtime,
+                            contentDescription = null,
+                            tint = SportOrange,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Timer habis: Menunggu lagu ini selesai baru mati",
+                            fontFamily = OutfitFontFamily,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = SportOrange
+                        )
                     }
                 }
             }
