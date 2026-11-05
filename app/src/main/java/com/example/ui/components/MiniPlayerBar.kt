@@ -19,9 +19,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bedtime
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -46,6 +48,7 @@ import com.example.ui.theme.SportCyan
 import com.example.ui.theme.SportLime
 import com.example.ui.theme.SportOrange
 import com.example.ui.theme.SportOrangeDim
+import com.example.ui.theme.SportRed
 import com.example.ui.theme.TextMuted
 import com.example.ui.theme.TextWhite
 
@@ -61,6 +64,8 @@ fun MiniPlayerBar(
     sleepTimerSecondsRemaining: Long,
     isWaitingForTrackEndToSleep: Boolean = false,
     currentDecibels: Float,
+    isFavorite: Boolean = false,
+    onFavoriteToggle: (() -> Unit)? = null,
     onTogglePlayPause: () -> Unit,
     onPlayNext: () -> Unit,
     onBarClick: () -> Unit,
@@ -225,11 +230,27 @@ fun MiniPlayerBar(
                     }
                 }
 
-                // Controls: Play/Pause and Next
+                // Controls: Love, Play/Pause and Next
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    horizontalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
+                    if (onFavoriteToggle != null) {
+                        IconButton(
+                            onClick = onFavoriteToggle,
+                            modifier = Modifier
+                                .size(36.dp)
+                                .testTag("mini_player_fav_btn")
+                        ) {
+                            Icon(
+                                imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                                contentDescription = if (isFavorite) "Hapus dari Favorit" else "Tambah ke Favorit",
+                                tint = if (isFavorite) SportRed else TextMuted,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+
                     IconButton(
                         onClick = onTogglePlayPause,
                         modifier = Modifier

@@ -314,6 +314,8 @@ fun MainPlayerScreen(
                                 isShuffleActive = uiState.isShuffleEnabled,
                                 isCurrentlyPlaying = isPlaying,
                                 onTrackClick = { viewModel.playTrack(track) },
+                                isFavorite = viewModel.isTrackFavorite(track.id),
+                                onFavoriteToggle = { viewModel.toggleFavoriteTrack(track.id) },
                                 onAddToPlaylistClick = { viewModel.promptAddToPlaylist(track) },
                                 onDeleteClick = { viewModel.promptDeleteTrack(track) }
                             )
@@ -342,6 +344,10 @@ fun MainPlayerScreen(
                         sleepTimerSecondsRemaining = uiState.sleepTimerRemainingSeconds,
                         isWaitingForTrackEndToSleep = uiState.isWaitingForTrackEndToSleep,
                         currentDecibels = uiState.currentDecibels,
+                        isFavorite = uiState.currentTrack?.let { viewModel.isTrackFavorite(it.id) } ?: false,
+                        onFavoriteToggle = {
+                            uiState.currentTrack?.let { viewModel.toggleFavoriteTrack(it.id) }
+                        },
                         onTogglePlayPause = { viewModel.togglePlayPause() },
                         onPlayNext = { viewModel.playNext() },
                         onBarClick = { viewModel.openFullPlayer() }
@@ -393,6 +399,10 @@ fun MainPlayerScreen(
                             viewModel.promptImportLyrics(it)
                             viewModel.setShowPasteLyricsDialog(true)
                         }
+                    },
+                    isFavorite = uiState.currentTrack?.let { viewModel.isTrackFavorite(it.id) } ?: false,
+                    onToggleFavorite = {
+                        uiState.currentTrack?.let { viewModel.toggleFavoriteTrack(it.id) }
                     },
                     onClose = { viewModel.closeFullPlayer() }
                 )

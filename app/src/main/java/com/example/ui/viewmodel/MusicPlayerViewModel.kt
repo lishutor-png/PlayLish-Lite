@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.audio.AudioPlayerEngine
+import com.example.audio.MusicPlaybackCoordinator
 import com.example.audio.OrderedShuffleQueue
 import com.example.data.model.LyricLine
 import com.example.data.model.LyricsParser
@@ -99,9 +100,22 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     private var waitingForTrackToEndToSleep: Boolean = false
 
     init {
+        setupMediaCoordinator()
         loadInitialTracks()
         observeSettings()
         startProgressTracker()
+    }
+
+    private fun setupMediaCoordinator() {
+        MusicPlaybackCoordinator.onPlayAction = { resume() }
+        MusicPlaybackCoordinator.onPauseAction = { pause() }
+        MusicPlaybackCoordinator.onNextAction = { playNext() }
+        MusicPlaybackCoordinator.onPrevAction = { playPrevious() }
+        MusicPlaybackCoordinator.onSeekAction = { pos -> seekTo(pos) }
+        MusicPlaybackCoordinator.onStopAction = {
+            pause()
+            MusicPlaybackCoordinator.stopService(getApplication())
+        }
     }
 
     private fun loadInitialTracks() {
@@ -259,6 +273,14 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             activeLyricIndex = 0,
             currentQueuePosition = shuffleQueue.getOrderBadge(track.id)
         )
+
+        MusicPlaybackCoordinator.updatePlaybackState(
+            context = getApplication(),
+            track = track,
+            isPlaying = true,
+            positionMs = 0L,
+            durationMs = track.durationMs
+        )
     }
 
     fun togglePlayPause() {
@@ -272,6 +294,13 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     fun pause() {
         audioEngine.pause()
         _uiState.value = _uiState.value.copy(isPlaying = false)
+        MusicPlaybackCoordinator.updatePlaybackState(
+            context = getApplication(),
+            track = _uiState.value.currentTrack,
+            isPlaying = false,
+            positionMs = _uiState.value.currentPositionMs,
+            durationMs = _uiState.value.durationMs
+        )
     }
 
     fun resume() {
@@ -281,11 +310,25 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         }
         audioEngine.resume()
         _uiState.value = _uiState.value.copy(isPlaying = true)
+        MusicPlaybackCoordinator.updatePlaybackState(
+            context = getApplication(),
+            track = _uiState.value.currentTrack,
+            isPlaying = true,
+            positionMs = _uiState.value.currentPositionMs,
+            durationMs = _uiState.value.durationMs
+        )
     }
 
     fun seekTo(positionMs: Long) {
         audioEngine.seekTo(positionMs)
         _uiState.value = _uiState.value.copy(currentPositionMs = positionMs)
+        MusicPlaybackCoordinator.updatePlaybackState(
+            context = getApplication(),
+            track = _uiState.value.currentTrack,
+            isPlaying = _uiState.value.isPlaying,
+            positionMs = positionMs,
+            durationMs = _uiState.value.durationMs
+        )
     }
 
     fun playNext() {
@@ -661,6 +704,51 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         _uiState.value = _uiState.value.copy(trackToAddToPlaylist = null)
     }
 
+    /**
+     * Checks if a track is in the Favorites playlist.
+     */
+    fun isTrackFavorite(trackId: String): Boolean {
+        val favPlaylist = _uiState.value.playlists.find {
+            it.id == "pl_favorites" ||
+            it.name.contains("Favorit", ignoreCase = true) ||
+            it.name.contains("Favorite", ignoreCase = true)
+        }
+        return favPlaylist?.trackIds?.contains(trackId) == true
+    }
+
+    /**
+     * Toggles a track in/out of the Favorites playlist.
+     * Instant one-tap Love action.
+     */
+    fun toggleFavoriteTrack(trackId: String) {
+        val existingFav = _uiState.value.playlists.find {
+            it.id == "pl_favorites" ||
+            it.name.contains("Favorit", ignoreCase = true) ||
+            it.name.contains("Favorite", ignoreCase = true)
+        }
+
+        if (existingFav != null) {
+            if (existingFav.trackIds.contains(trackId)) {
+                removeTrackFromPlaylist(trackId, existingFav.id)
+            } else {
+                addTrackToPlaylist(trackId, existingFav.id)
+            }
+        } else {
+            val newFav = Playlist(
+                id = "pl_favorites",
+                name = "Favorit Saya",
+                description = "Kumpulan lagu yang paling disukai",
+                trackIds = listOf(trackId)
+            )
+            val updated = listOf(newFav) + _uiState.value.playlists
+            _uiState.value = _uiState.value.copy(playlists = updated)
+            viewModelScope.launch {
+                repository.savePlaylists(updated)
+            }
+            syncQueueWithFilteredTracks()
+        }
+    }
+
     fun setShowPlaylistModal(show: Boolean) {
         _uiState.value = _uiState.value.copy(showPlaylistModal = show)
     }
@@ -927,5 +1015,6 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         audioEngine.stop()
         playbackProgressJob?.cancel()
         sleepTimerJob?.cancel()
+        MusicPlaybackCoordinator.stopService(getApplication())
     }
 }

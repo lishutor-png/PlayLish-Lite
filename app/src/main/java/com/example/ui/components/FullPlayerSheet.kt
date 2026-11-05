@@ -28,6 +28,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.Equalizer
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.outlined.FavoriteBorder
+import com.example.ui.theme.SportRed
 import androidx.compose.material.icons.filled.FormatQuote
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Hearing
@@ -120,6 +123,8 @@ fun FullPlayerSheet(
     onOpenLyrics: () -> Unit,
     onImportLyrics: () -> Unit = {},
     onPasteLyrics: () -> Unit = {},
+    isFavorite: Boolean = false,
+    onToggleFavorite: (() -> Unit)? = null,
     onClose: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -420,29 +425,53 @@ fun FullPlayerSheet(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // Track Title & Artist
-            Text(
-                text = track.title,
-                fontFamily = OutfitFontFamily,
-                fontWeight = FontWeight.Bold,
-                fontSize = 18.sp,
-                color = TextWhite,
-                textAlign = TextAlign.Center,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
+            // Track Title, Artist & Love Button
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = track.title,
+                        fontFamily = OutfitFontFamily,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp,
+                        color = TextWhite,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
 
-            Spacer(modifier = Modifier.height(4.dp))
+                    Spacer(modifier = Modifier.height(3.dp))
 
-            Text(
-                text = "${track.artist} — ${track.album}",
-                fontFamily = OutfitFontFamily,
-                fontSize = 13.sp,
-                color = TextMuted,
-                textAlign = TextAlign.Center,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+                    Text(
+                        text = "${track.artist} — ${track.album}",
+                        fontFamily = OutfitFontFamily,
+                        fontSize = 13.sp,
+                        color = TextMuted,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+
+                if (onToggleFavorite != null) {
+                    IconButton(
+                        onClick = onToggleFavorite,
+                        modifier = Modifier
+                            .size(44.dp)
+                            .testTag("full_player_fav_btn")
+                    ) {
+                        Icon(
+                            imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                            contentDescription = if (isFavorite) "Hapus dari Favorit" else "Tambah ke Favorit",
+                            tint = if (isFavorite) SportRed else TextMuted,
+                            modifier = Modifier.size(26.dp)
+                        )
+                    }
+                }
+            }
 
             Spacer(modifier = Modifier.height(14.dp))
 

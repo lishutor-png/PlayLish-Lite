@@ -23,7 +23,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.PlaylistAdd
+import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -51,6 +53,7 @@ import com.example.ui.theme.SportCyanDim
 import com.example.ui.theme.SportLime
 import com.example.ui.theme.SportOrange
 import com.example.ui.theme.SportOrangeDim
+import com.example.ui.theme.SportRed
 import com.example.ui.theme.TextMuted
 import com.example.ui.theme.TextWhite
 
@@ -61,6 +64,8 @@ fun TrackCard(
     isShuffleActive: Boolean,
     isCurrentlyPlaying: Boolean,
     onTrackClick: () -> Unit,
+    isFavorite: Boolean = false,
+    onFavoriteToggle: (() -> Unit)? = null,
     onAddToPlaylistClick: (() -> Unit)? = null,
     onDeleteClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
@@ -197,6 +202,24 @@ fun TrackCard(
                     fontSize = 13.sp,
                     color = if (isCurrentlyPlaying) SportOrange else TextMuted
                 )
+
+                // Love / Favorite button for one-tap favorite playlist management
+                if (onFavoriteToggle != null) {
+                    Spacer(modifier = Modifier.width(2.dp))
+                    IconButton(
+                        onClick = onFavoriteToggle,
+                        modifier = Modifier
+                            .size(34.dp)
+                            .testTag("fav_btn_${track.id}")
+                    ) {
+                        Icon(
+                            imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                            contentDescription = if (isFavorite) "Hapus dari Favorit" else "Tambah ke Favorit",
+                            tint = if (isFavorite) SportRed else TextMuted,
+                            modifier = Modifier.size(19.dp)
+                        )
+                    }
+                }
 
                 if (onAddToPlaylistClick != null) {
                     Spacer(modifier = Modifier.width(2.dp))
