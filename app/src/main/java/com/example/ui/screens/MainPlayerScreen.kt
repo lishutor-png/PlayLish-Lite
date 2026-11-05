@@ -438,6 +438,9 @@ fun MainPlayerScreen(
                 onUpdateHearingProtection = { enabled, maxVol, targetDb ->
                     viewModel.updateHearingProtection(enabled, maxVol, targetDb)
                 },
+                onExtendTimer = { extraMinutes ->
+                    viewModel.extendSleepTimer(extraMinutes)
+                },
                 onDismiss = { viewModel.setShowSleepTimerDialog(false) }
             )
         }

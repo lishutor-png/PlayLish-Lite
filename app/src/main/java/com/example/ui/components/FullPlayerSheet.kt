@@ -196,37 +196,53 @@ fun FullPlayerSheet(
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    // Sleep timer trigger button
-                    IconButton(
-                        onClick = onOpenSleepTimer,
-                        modifier = Modifier.testTag("full_player_sleep_btn")
-                    ) {
-                        if (isSleepTimerActive || isWaitingForTrackEndToSleep) {
-                            val mins = sleepTimerRemainingSeconds / 60
-                            val secs = sleepTimerRemainingSeconds % 60
-                            val badgeText = if (isWaitingForTrackEndToSleep) "Lagu Akhir" else "%d:%02d".format(mins, secs)
-                            BadgedBox(
-                                badge = {
-                                    Badge(
-                                        containerColor = SportOrange,
-                                        contentColor = Color.Black
-                                    ) {
-                                        Text(
-                                            text = badgeText,
-                                            fontFamily = RajdhaniFontFamily,
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 9.sp
-                                        )
-                                    }
-                                }
+                    // Sleep timer trigger button with Live High-Contrast Capsule Badge
+                    if (isSleepTimerActive || isWaitingForTrackEndToSleep) {
+                        val hours = sleepTimerRemainingSeconds / 3600
+                        val mins = (sleepTimerRemainingSeconds % 3600) / 60
+                        val secs = sleepTimerRemainingSeconds % 60
+                        val badgeText = if (isWaitingForTrackEndToSleep) {
+                            "Lagu Akhir"
+                        } else if (hours > 0) {
+                            "%d:%02d:%02d".format(hours, mins, secs)
+                        } else {
+                            "%02d:%02d".format(mins, secs)
+                        }
+                        Surface(
+                            onClick = onOpenSleepTimer,
+                            shape = RoundedCornerShape(20.dp),
+                            color = SportOrange,
+                            contentColor = Color.Black,
+                            shadowElevation = 3.dp,
+                            modifier = Modifier
+                                .padding(end = 4.dp)
+                                .testTag("full_player_sleep_btn")
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Bedtime,
                                     contentDescription = "Sleep Timer Active",
-                                    tint = SportOrange
+                                    tint = Color.Black,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = badgeText,
+                                    fontFamily = RajdhaniFontFamily,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp,
+                                    color = Color.Black
                                 )
                             }
-                        } else {
+                        }
+                    } else {
+                        IconButton(
+                            onClick = onOpenSleepTimer,
+                            modifier = Modifier.testTag("full_player_sleep_btn")
+                        ) {
                             Icon(
                                 imageVector = Icons.Default.Bedtime,
                                 contentDescription = "Sleep Timer",

@@ -455,6 +455,18 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         )
     }
 
+    fun extendSleepTimer(extraMinutes: Int) {
+        val currentSec = _uiState.value.sleepTimerRemainingSeconds
+        val addedSec = extraMinutes.toLong() * 60L
+        val newTotalMinutes = ((currentSec + addedSec) / 60L).toInt().coerceAtLeast(1)
+        startSleepTimer(
+            minutes = newTotalMinutes,
+            finishCurrentSong = userSettings.value.sleepModeFinishSong,
+            fadeVolume = userSettings.value.sleepVolumeFade,
+            fadeDurationMin = userSettings.value.sleepFadeDurationMinutes
+        )
+    }
+
     private fun stopAndSleep() {
         pause()
         audioEngine.setFadeMultiplier(1.0f)

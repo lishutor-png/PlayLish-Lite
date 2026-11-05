@@ -167,41 +167,52 @@ fun MinimalistHeader(
 
             // Quick action icons (Sleep Timer with ticker badge, Equalizer, Search, Settings)
             Row(verticalAlignment = Alignment.CenterVertically) {
-                // Sleep Timer Button with Live Badge
-                IconButton(
-                    onClick = onOpenSleepTimer,
-                    modifier = Modifier.testTag("sleep_timer_top_btn")
-                ) {
-                    if (isSleepTimerActive || isWaitingForTrackEndToSleep) {
-                        BadgedBox(
-                            badge = {
-                                Badge(
-                                    containerColor = SportOrange,
-                                    contentColor = Color.Black
-                                ) {
-                                    val badgeText = if (isWaitingForTrackEndToSleep) {
-                                        "Lagu Selesai"
-                                    } else {
-                                        val mins = sleepTimerSecondsRemaining / 60
-                                        val secs = sleepTimerSecondsRemaining % 60
-                                        "%d:%02d".format(mins, secs)
-                                    }
-                                    Text(
-                                        text = badgeText,
-                                        fontFamily = RajdhaniFontFamily,
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 10.sp
-                                    )
-                                }
-                            }
+                // Sleep Timer Button with Live High-Contrast Capsule Badge
+                if (isSleepTimerActive || isWaitingForTrackEndToSleep) {
+                    val badgeText = if (isWaitingForTrackEndToSleep) {
+                        "Lagu Selesai"
+                    } else {
+                        val hours = sleepTimerSecondsRemaining / 3600
+                        val mins = (sleepTimerSecondsRemaining % 3600) / 60
+                        val secs = sleepTimerSecondsRemaining % 60
+                        if (hours > 0) "%d:%02d:%02d".format(hours, mins, secs)
+                        else "%02d:%02d".format(mins, secs)
+                    }
+                    Surface(
+                        onClick = onOpenSleepTimer,
+                        shape = RoundedCornerShape(20.dp),
+                        color = SportOrange,
+                        contentColor = Color.Black,
+                        shadowElevation = 3.dp,
+                        modifier = Modifier
+                            .padding(end = 6.dp)
+                            .testTag("sleep_timer_top_btn")
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Bedtime,
                                 contentDescription = "Sleep Timer Active",
-                                tint = SportOrange
+                                tint = Color.Black,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = badgeText,
+                                fontFamily = RajdhaniFontFamily,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp,
+                                color = Color.Black
                             )
                         }
-                    } else {
+                    }
+                } else {
+                    IconButton(
+                        onClick = onOpenSleepTimer,
+                        modifier = Modifier.testTag("sleep_timer_top_btn")
+                    ) {
                         Icon(
                             imageVector = Icons.Default.Bedtime,
                             contentDescription = "Sleep Timer",

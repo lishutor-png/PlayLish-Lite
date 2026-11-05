@@ -148,29 +148,36 @@ fun MiniPlayerBar(
 
                         // Live Sleep Timer badge if active or waiting for track end
                         AnimatedVisibility(visible = isSleepTimerActive || isWaitingForTrackEndToSleep) {
-                            val mins = sleepTimerSecondsRemaining / 60
+                            val hours = sleepTimerSecondsRemaining / 3600
+                            val mins = (sleepTimerSecondsRemaining % 3600) / 60
                             val secs = sleepTimerSecondsRemaining % 60
-                            val badgeText = if (isWaitingForTrackEndToSleep) "Lagu Akhir" else "%d:%02d".format(mins, secs)
+                            val badgeText = if (isWaitingForTrackEndToSleep) {
+                                "Lagu Akhir"
+                            } else if (hours > 0) {
+                                "%d:%02d:%02d".format(hours, mins, secs)
+                            } else {
+                                "%02d:%02d".format(mins, secs)
+                            }
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 modifier = Modifier
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .background(SportOrange.copy(alpha = 0.2f))
-                                    .padding(horizontal = 4.dp, vertical = 1.dp)
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(SportOrange)
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Bedtime,
                                     contentDescription = null,
-                                    tint = SportOrange,
-                                    modifier = Modifier.size(10.dp)
+                                    tint = Color.Black,
+                                    modifier = Modifier.size(11.dp)
                                 )
-                                Spacer(modifier = Modifier.width(2.dp))
+                                Spacer(modifier = Modifier.width(3.dp))
                                 Text(
                                     text = badgeText,
                                     fontFamily = RajdhaniFontFamily,
                                     fontWeight = FontWeight.Bold,
-                                    fontSize = 10.sp,
-                                    color = SportOrange
+                                    fontSize = 11.sp,
+                                    color = Color.Black
                                 )
                             }
                         }
