@@ -81,7 +81,7 @@ fun SleepTimerModal(
     isTimerActive: Boolean,
     remainingSeconds: Long,
     currentDecibels: Float,
-    onStartTimer: (minutes: Int, finishSong: Boolean, fadeVolume: Boolean, fadeDurationMin: Int) -> Unit,
+    onStartTimer: (minutes: Int, finishSong: Boolean, fadeVolume: Boolean, fadeDurationSec: Int) -> Unit,
     onCancelTimer: () -> Unit,
     onUpdateHearingProtection: (enabled: Boolean, maxVolumePercent: Int, targetDb: Float) -> Unit,
     onExtendTimer: ((extraMinutes: Int) -> Unit)? = null,
@@ -104,6 +104,7 @@ fun SleepTimerModal(
 
     var finishCurrentSong by remember { mutableStateOf(currentSettings.sleepModeFinishSong) }
     var volumeFade by remember { mutableStateOf(currentSettings.sleepVolumeFade) }
+    var fadeDurationSeconds by remember { mutableIntStateOf(currentSettings.sleepFadeDurationSeconds.coerceIn(10, 120)) }
     var hearingProtection by remember { mutableStateOf(currentSettings.hearingProtectionEnabled) }
     var maxSafeVolume by remember { mutableIntStateOf(currentSettings.maxSafeVolumePercent.coerceIn(30, 100)) }
 
@@ -826,41 +827,91 @@ fun SleepTimerModal(
                     border = androidx.compose.foundation.BorderStroke(1.dp, SportCardBorder),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(12.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = if (volumeFade) "Peredupan Halus (Fade-Out)" else "Tanpa Peredupan",
-                                fontFamily = OutfitFontFamily,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 13.sp,
-                                color = TextWhite
-                            )
-                            Text(
-                                text = if (volumeFade)
-                                    "Volume melembut bertahap di 2 menit terakhir sehingga telinga nyaman."
-                                else
-                                    "Volume tetap konstan hingga akhir pemutaran.",
-                                fontFamily = OutfitFontFamily,
-                                fontSize = 11.sp,
-                                color = TextMuted
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = if (volumeFade) "Peredupan Halus (Fade-Out)" else "Tanpa Peredupan",
+                                    fontFamily = OutfitFontFamily,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp,
+                                    color = TextWhite
+                                )
+                                Text(
+                                    text = if (volumeFade)
+                                        "Volume mengecil bertahap selama $fadeDurationSeconds detik sebelum pemutar mati."
+                                    else
+                                        "Volume tetap konstan hingga akhir pemutaran.",
+                                    fontFamily = OutfitFontFamily,
+                                    fontSize = 11.sp,
+                                    color = TextMuted
+                                )
+                            }
+                            Switch(
+                                checked = volumeFade,
+                                onCheckedChange = { volumeFade = it },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = Color.Black,
+                                    checkedTrackColor = SportOrange,
+                                    uncheckedThumbColor = TextMuted,
+                                    uncheckedTrackColor = SportCardBorder
+                                )
                             )
                         }
-                        Switch(
-                            checked = volumeFade,
-                            onCheckedChange = { volumeFade = it },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = Color.Black,
-                                checkedTrackColor = SportOrange,
-                                uncheckedThumbColor = TextMuted,
-                                uncheckedTrackColor = SportCardBorder
+
+                        if (volumeFade) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text(
+                                text = "DURASI FADE-OUT (DETIK):",
+                                fontFamily = RajdhaniFontFamily,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 10.sp,
+                                color = SportOrange,
+                                letterSpacing = 1.sp
                             )
-                        )
+                            Spacer(modifier = Modifier.height(6.dp))
+
+                            val fadeOptions = listOf(
+                                15 to "15 Detik",
+                                30 to "30 Detik",
+                                45 to "45 Detik",
+                                60 to "60 Detik"
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                fadeOptions.forEach { (sec, label) ->
+                                    val isSelected = fadeDurationSeconds == sec
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(if (isSelected) SportOrange else SportCardSurface)
+                                            .border(
+                                                1.dp,
+                                                if (isSelected) SportOrange else SportCardBorder,
+                                                RoundedCornerShape(8.dp)
+                                            )
+                                            .clickable { fadeDurationSeconds = sec }
+                                            .padding(vertical = 6.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = if (sec == 30) "$label ★" else label,
+                                            fontFamily = RajdhaniFontFamily,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 11.sp,
+                                            color = if (isSelected) Color.Black else TextWhite
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -986,7 +1037,7 @@ fun SleepTimerModal(
                                 totalMinutes,
                                 finishCurrentSong,
                                 volumeFade,
-                                2 // 2 minutes fade-out
+                                fadeDurationSeconds
                             )
                             onDismiss()
                         },

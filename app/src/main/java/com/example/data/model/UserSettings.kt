@@ -4,7 +4,7 @@ data class UserSettings(
     val sleepTimerMinutes: Int = 30,
     val sleepModeFinishSong: Boolean = false,       // false: langsung mati; true: tunggu lagu selesai
     val sleepVolumeFade: Boolean = true,           // true: bertahap (fade-out); false: mendadak
-    val sleepFadeDurationMinutes: Int = 2,
+    val sleepFadeDurationSeconds: Int = 30,        // Fade-out melembutkan suara 30 detik sebelum mati
     val hearingProtectionEnabled: Boolean = true,  // Batas aman telinga
     val maxSafeVolumePercent: Int = 75,            // 75% max cap
     val targetSafeDb: Float = -12.0f,              // target output in dB

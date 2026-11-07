@@ -435,14 +435,14 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         minutes: Int,
         finishCurrentSong: Boolean,
         fadeVolume: Boolean,
-        fadeDurationMin: Int
+        fadeDurationSec: Int = 30
     ) {
         sleepTimerJob?.cancel()
         waitingForTrackToEndToSleep = false
         audioEngine.setFadeMultiplier(1.0f)
 
         val totalSeconds = minutes.toLong() * 60L
-        val fadeSeconds = (fadeDurationMin * 60L).coerceAtMost(totalSeconds)
+        val fadeSeconds = fadeDurationSec.toLong().coerceAtMost(totalSeconds)
 
         _uiState.value = _uiState.value.copy(
             isSleepTimerActive = true,
@@ -454,7 +454,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 minutes = minutes,
                 finishSong = finishCurrentSong,
                 volumeFade = fadeVolume,
-                fadeDurationMin = fadeDurationMin
+                fadeDurationSec = fadeDurationSec
             )
         }
 
@@ -465,7 +465,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 remaining--
                 _uiState.value = _uiState.value.copy(sleepTimerRemainingSeconds = remaining)
 
-                // Gradual decibel/volume fade-out during the final minutes
+                // Gradual decibel/volume fade-out during the final seconds (default 30 detik)
                 if (fadeVolume && remaining <= fadeSeconds && fadeSeconds > 0) {
                     val fadeFactor = (remaining.toFloat() / fadeSeconds.toFloat()).coerceIn(0.05f, 1.0f)
                     audioEngine.setFadeMultiplier(fadeFactor)
@@ -506,7 +506,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             minutes = newTotalMinutes,
             finishCurrentSong = userSettings.value.sleepModeFinishSong,
             fadeVolume = userSettings.value.sleepVolumeFade,
-            fadeDurationMin = userSettings.value.sleepFadeDurationMinutes
+            fadeDurationSec = userSettings.value.sleepFadeDurationSeconds
         )
     }
 

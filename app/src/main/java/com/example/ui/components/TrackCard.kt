@@ -24,6 +24,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.PlaylistAdd
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.Icon
@@ -93,15 +94,36 @@ fun TrackCard(
                 .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // ORDER BADGE or ALBUM ART (Crucial for ordered shuffle tracking)
+            // ORDER NUMBER (Always visible regardless of whether album art exists)
+            Box(
+                modifier = Modifier
+                    .width(26.dp)
+                    .testTag("track_order_${track.id}"),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = if (isShuffleActive) "#$orderNumber" else "%02d".format(orderNumber),
+                    fontFamily = RajdhaniFontFamily,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = if (isShuffleActive) 13.sp else 12.sp,
+                    color = when {
+                        isCurrentlyPlaying -> SportOrange
+                        isShuffleActive -> SportOrange
+                        else -> TextMuted
+                    }
+                )
+            }
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            // ALBUM ART / ICON THUMBNAIL
             Box(
                 modifier = Modifier
                     .size(38.dp)
                     .clip(RoundedCornerShape(8.dp))
                     .background(
                         when {
-                            isCurrentlyPlaying -> SportOrange
-                            isShuffleActive -> SportOrangeDim
+                            isCurrentlyPlaying -> SportOrangeDim
                             else -> SportCardBorder
                         }
                     ),
@@ -120,7 +142,7 @@ fun TrackCard(
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .background(Color.Black.copy(alpha = 0.5f)),
+                                .background(Color.Black.copy(alpha = 0.55f)),
                             contentAlignment = Alignment.Center
                         ) {
                             MiniWaveAnimation()
@@ -129,21 +151,16 @@ fun TrackCard(
                 } else if (isCurrentlyPlaying) {
                     MiniWaveAnimation()
                 } else {
-                    Text(
-                        text = if (isShuffleActive) "#$orderNumber" else "%02d".format(orderNumber),
-                        fontFamily = RajdhaniFontFamily,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = if (isShuffleActive) 14.sp else 13.sp,
-                        color = when {
-                            isCurrentlyPlaying -> Color.Black
-                            isShuffleActive -> SportOrange
-                            else -> TextMuted
-                        }
+                    Icon(
+                        imageVector = Icons.Default.MusicNote,
+                        contentDescription = null,
+                        tint = TextMuted,
+                        modifier = Modifier.size(18.dp)
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(10.dp))
 
             // Track Details
             Column(

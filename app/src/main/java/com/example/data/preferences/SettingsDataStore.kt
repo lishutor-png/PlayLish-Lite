@@ -39,7 +39,7 @@ class SettingsDataStore(private val context: Context) {
             sleepTimerMinutes = preferences[PreferencesKeys.SLEEP_TIMER_MINUTES] ?: 30,
             sleepModeFinishSong = preferences[PreferencesKeys.SLEEP_FINISH_SONG] ?: false,
             sleepVolumeFade = preferences[PreferencesKeys.SLEEP_VOLUME_FADE] ?: true,
-            sleepFadeDurationMinutes = preferences[PreferencesKeys.SLEEP_FADE_DURATION] ?: 2,
+            sleepFadeDurationSeconds = preferences[PreferencesKeys.SLEEP_FADE_DURATION] ?: 30,
             hearingProtectionEnabled = preferences[PreferencesKeys.HEARING_PROTECTION] ?: true,
             maxSafeVolumePercent = preferences[PreferencesKeys.MAX_SAFE_VOLUME] ?: 75,
             targetSafeDb = preferences[PreferencesKeys.TARGET_SAFE_DB] ?: -12.0f,
@@ -58,7 +58,7 @@ class SettingsDataStore(private val context: Context) {
             preferences[PreferencesKeys.SLEEP_TIMER_MINUTES] = settings.sleepTimerMinutes
             preferences[PreferencesKeys.SLEEP_FINISH_SONG] = settings.sleepModeFinishSong
             preferences[PreferencesKeys.SLEEP_VOLUME_FADE] = settings.sleepVolumeFade
-            preferences[PreferencesKeys.SLEEP_FADE_DURATION] = settings.sleepFadeDurationMinutes
+            preferences[PreferencesKeys.SLEEP_FADE_DURATION] = settings.sleepFadeDurationSeconds
             preferences[PreferencesKeys.HEARING_PROTECTION] = settings.hearingProtectionEnabled
             preferences[PreferencesKeys.MAX_SAFE_VOLUME] = settings.maxSafeVolumePercent
             preferences[PreferencesKeys.TARGET_SAFE_DB] = settings.targetSafeDb
@@ -76,13 +76,13 @@ class SettingsDataStore(private val context: Context) {
         minutes: Int,
         finishSong: Boolean,
         volumeFade: Boolean,
-        fadeDurationMin: Int
+        fadeDurationSec: Int
     ) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.SLEEP_TIMER_MINUTES] = minutes
             preferences[PreferencesKeys.SLEEP_FINISH_SONG] = finishSong
             preferences[PreferencesKeys.SLEEP_VOLUME_FADE] = volumeFade
-            preferences[PreferencesKeys.SLEEP_FADE_DURATION] = fadeDurationMin
+            preferences[PreferencesKeys.SLEEP_FADE_DURATION] = fadeDurationSec
         }
     }
 
