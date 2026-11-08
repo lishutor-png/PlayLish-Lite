@@ -111,6 +111,12 @@ class AudioPlayerEngine(
     }
 
     private fun playDeviceMedia(track: Track, startPositionMs: Long) {
+        val uriStr = track.uri
+        if (uriStr.isNullOrBlank()) {
+            playSynthesizedTrack(track, startPositionMs)
+            return
+        }
+
         try {
             val player = MediaPlayer().apply {
                 setAudioAttributes(
@@ -119,7 +125,7 @@ class AudioPlayerEngine(
                         .setUsage(AudioAttributes.USAGE_MEDIA)
                         .build()
                 )
-                setDataSource(context, Uri.parse(track.uri))
+                setDataSource(context, Uri.parse(uriStr))
                 setOnPreparedListener { mp ->
                     if (startPositionMs > 0) {
                         mp.seekTo(startPositionMs.toInt())
@@ -131,6 +137,19 @@ class AudioPlayerEngine(
                 setOnCompletionListener {
                     isCurrentlyPlaying = false
                     onTrackCompleted()
+                }
+                setOnErrorListener { mp, what, extra ->
+                    isCurrentlyPlaying = false
+                    try {
+                        mp.setOnCompletionListener(null)
+                        mp.setOnErrorListener(null)
+                        mp.reset()
+                        mp.release()
+                    } catch (_: Exception) {}
+                    mediaPlayer = null
+                    // Fallback to internal synth instead of triggering rapid onTrackCompleted loop
+                    playSynthesizedTrack(track, startPositionMs)
+                    true // Returning true indicates the error is handled and suppresses OnCompletionListener
                 }
                 prepareAsync()
             }
@@ -182,7 +201,8 @@ class AudioPlayerEngine(
             val pcmBuffer = ShortArray(chunkSamples * 2) // Stereo
             var phase = 0.0
             val startTime = System.currentTimeMillis() - startPositionMs
-            val totalDuration = track.durationMs
+            val rawDuration = track.durationMs
+            val totalDuration = if (rawDuration > 1000L) rawDuration else 180000L
 
             while (isActive && isCurrentlyPlaying) {
                 val elapsed = System.currentTimeMillis() - startTime
@@ -255,6 +275,9 @@ class AudioPlayerEngine(
     fun stop() {
         isCurrentlyPlaying = false
         try {
+            mediaPlayer?.setOnCompletionListener(null)
+            mediaPlayer?.setOnErrorListener(null)
+            mediaPlayer?.setOnPreparedListener(null)
             mediaPlayer?.stop()
             mediaPlayer?.release()
         } catch (_: Exception) {}

@@ -27,6 +27,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -83,7 +84,19 @@ fun MainPlayerScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val userSettings by viewModel.userSettings.collectAsState()
-    val filteredTracks = viewModel.getFilteredTracks()
+    val allTracksList by viewModel.allTracks.collectAsState()
+    val filteredTracks = remember(
+        allTracksList,
+        uiState.selectedCategory,
+        uiState.searchQuery,
+        uiState.selectedPlaylistId,
+        uiState.trackSortOption,
+        uiState.sortQueueByShuffleOrder,
+        uiState.isShuffleEnabled,
+        uiState.playlists
+    ) {
+        viewModel.getFilteredTracks()
+    }
 
     // File Picker for importing audio files directly
     val filePickerLauncher = rememberLauncherForActivityResult(
@@ -304,8 +317,12 @@ fun MainPlayerScreen(
                         ),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        items(filteredTracks, key = { it.id }) { track ->
-                            val orderNum = uiState.shuffleOrderMap[track.id] ?: 1
+                        itemsIndexed(filteredTracks, key = { _, track -> track.id }) { index, track ->
+                            val orderNum = if (uiState.isShuffleEnabled) {
+                                uiState.shuffleOrderMap[track.id] ?: (index + 1)
+                            } else {
+                                index + 1
+                            }
                             val isPlaying = uiState.isPlaying && uiState.currentTrack?.id == track.id
 
                             TrackCard(

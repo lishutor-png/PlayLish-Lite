@@ -190,12 +190,20 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     private fun syncQueueWithFilteredTracks() {
         val tracks = getFilteredTracks()
         val currentId = _uiState.value.currentTrack?.id
-        shuffleQueue.setupQueue(tracks, _uiState.value.isShuffleEnabled, currentId)
+        val isShuffle = _uiState.value.isShuffleEnabled
+        shuffleQueue.setupQueue(tracks, isShuffle, currentId)
+
+        val queuePos = if (isShuffle) {
+            if (currentId != null) shuffleQueue.getOrderBadge(currentId) else 1
+        } else {
+            val idx = tracks.indexOfFirst { it.id == currentId }
+            if (idx != -1) idx + 1 else 1
+        }
 
         _uiState.value = _uiState.value.copy(
             shuffleOrderMap = shuffleQueue.orderIndexMap,
             totalQueueCount = tracks.size,
-            currentQueuePosition = if (currentId != null) shuffleQueue.getOrderBadge(currentId) else 1
+            currentQueuePosition = queuePos
         )
     }
 
@@ -215,11 +223,15 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             }
         }
 
-        // Filter by selected playlist
+        // Filter by selected playlist while preserving exact playlist track sequence
         if (selectedPlId != null) {
             val playlist = _uiState.value.playlists.find { it.id == selectedPlId }
-            val allowedIds = playlist?.trackIds?.toSet() ?: emptySet()
-            filtered = filtered.filter { it.id in allowedIds }
+            if (playlist != null) {
+                val trackMap = _allTracks.value.associateBy { it.id }
+                filtered = playlist.trackIds.mapNotNull { trackMap[it] }
+            } else {
+                filtered = emptyList()
+            }
         }
 
         if (query.isNotEmpty()) {
@@ -264,6 +276,14 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         audioEngine.playTrack(track)
         shuffleQueue.moveToTrack(track.id)
 
+        val tracks = getFilteredTracks()
+        val currentQueuePos = if (_uiState.value.isShuffleEnabled) {
+            shuffleQueue.getOrderBadge(track.id)
+        } else {
+            val idx = tracks.indexOfFirst { it.id == track.id }
+            if (idx != -1) idx + 1 else 1
+        }
+
         _uiState.value = _uiState.value.copy(
             currentTrack = track,
             isPlaying = true,
@@ -271,7 +291,8 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             durationMs = track.durationMs,
             currentLyrics = LyricsParser.parse(track.rawLyrics),
             activeLyricIndex = 0,
-            currentQueuePosition = shuffleQueue.getOrderBadge(track.id)
+            currentQueuePosition = currentQueuePos,
+            totalQueueCount = tracks.size
         )
 
         MusicPlaybackCoordinator.updatePlaybackState(
@@ -333,11 +354,38 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
     fun playNext() {
         val tracks = getFilteredTracks()
-        val nextId = shuffleQueue.moveToNext(repeatAll = _uiState.value.repeatMode != PlaybackRepeatMode.OFF)
-        val nextTrack = tracks.find { it.id == nextId } ?: _allTracks.value.find { it.id == nextId }
+        if (tracks.isEmpty()) return
+
+        val isShuffle = _uiState.value.isShuffleEnabled
+        val currentTrackId = _uiState.value.currentTrack?.id
+        val repeatMode = _uiState.value.repeatMode
+
+        val nextTrack = if (isShuffle) {
+            val nextId = shuffleQueue.moveToNext(repeatAll = repeatMode != PlaybackRepeatMode.OFF)
+            tracks.find { it.id == nextId } ?: _allTracks.value.find { it.id == nextId }
+        } else {
+            // Natural playlist order: strictly sequential
+            val currentIndex = tracks.indexOfFirst { it.id == currentTrackId }
+            if (currentIndex != -1) {
+                val nextIndex = currentIndex + 1
+                if (nextIndex < tracks.size) {
+                    tracks[nextIndex]
+                } else if (repeatMode != PlaybackRepeatMode.OFF) {
+                    tracks.firstOrNull()
+                } else {
+                    null
+                }
+            } else {
+                tracks.firstOrNull()
+            }
+        }
 
         if (nextTrack != null) {
             playTrack(nextTrack)
+        } else {
+            // Reached the end of queue in repeat OFF mode
+            pause()
+            seekTo(0L)
         }
     }
 
@@ -349,8 +397,31 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         }
 
         val tracks = getFilteredTracks()
-        val prevId = shuffleQueue.moveToPrevious()
-        val prevTrack = tracks.find { it.id == prevId } ?: _allTracks.value.find { it.id == prevId }
+        if (tracks.isEmpty()) return
+
+        val isShuffle = _uiState.value.isShuffleEnabled
+        val currentTrackId = _uiState.value.currentTrack?.id
+        val repeatMode = _uiState.value.repeatMode
+
+        val prevTrack = if (isShuffle) {
+            val prevId = shuffleQueue.moveToPrevious()
+            tracks.find { it.id == prevId } ?: _allTracks.value.find { it.id == prevId }
+        } else {
+            // Natural playlist order: strictly sequential
+            val currentIndex = tracks.indexOfFirst { it.id == currentTrackId }
+            if (currentIndex != -1) {
+                val prevIndex = currentIndex - 1
+                if (prevIndex >= 0) {
+                    tracks[prevIndex]
+                } else if (repeatMode != PlaybackRepeatMode.OFF) {
+                    tracks.lastOrNull()
+                } else {
+                    tracks.firstOrNull()
+                }
+            } else {
+                tracks.firstOrNull()
+            }
+        }
 
         if (prevTrack != null) {
             playTrack(prevTrack)
@@ -386,10 +457,17 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
         shuffleQueue.setupQueue(tracks, newShuffle, currentTrackId)
 
+        val queuePos = if (newShuffle) {
+            if (currentTrackId != null) shuffleQueue.getOrderBadge(currentTrackId) else 1
+        } else {
+            val idx = tracks.indexOfFirst { it.id == currentTrackId }
+            if (idx != -1) idx + 1 else 1
+        }
+
         _uiState.value = _uiState.value.copy(
             isShuffleEnabled = newShuffle,
             shuffleOrderMap = shuffleQueue.orderIndexMap,
-            currentQueuePosition = if (currentTrackId != null) shuffleQueue.getOrderBadge(currentTrackId) else 1
+            currentQueuePosition = queuePos
         )
 
         viewModelScope.launch {

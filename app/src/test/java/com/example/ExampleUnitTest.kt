@@ -78,5 +78,29 @@ class ExampleUnitTest {
         val sortedByDurationDesc = list.sortedByDescending { it.durationMs }
         assertEquals(listOf(300000L, 240000L, 120000L), sortedByDurationDesc.map { it.durationMs })
     }
+
+    @Test
+    fun `natural queue maintains strict sequential order when shuffle is false`() {
+        val queue = OrderedShuffleQueue()
+        val dummyTracks = listOf(
+            Track(id = "track_a", title = "Song A", artist = "Artist", album = "Album", durationMs = 100000L),
+            Track(id = "track_b", title = "Song B", artist = "Artist", album = "Album", durationMs = 100000L),
+            Track(id = "track_c", title = "Song C", artist = "Artist", album = "Album", durationMs = 100000L)
+        )
+
+        // Setup queue with shuffle = false
+        queue.setupQueue(dummyTracks, shuffle = false)
+        assertEquals(false, queue.isShuffleActive)
+
+        // First track is 1, second is 2, third is 3
+        assertEquals(1, queue.getOrderBadge("track_a"))
+        assertEquals(2, queue.getOrderBadge("track_b"))
+        assertEquals(3, queue.getOrderBadge("track_c"))
+
+        // Sequential advancement
+        assertEquals("track_b", queue.moveToNext(repeatAll = true))
+        assertEquals("track_c", queue.moveToNext(repeatAll = true))
+        assertEquals("track_a", queue.moveToNext(repeatAll = true)) // loops to first
+    }
 }
 
