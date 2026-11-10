@@ -102,5 +102,21 @@ class ExampleUnitTest {
         assertEquals("track_c", queue.moveToNext(repeatAll = true))
         assertEquals("track_a", queue.moveToNext(repeatAll = true)) // loops to first
     }
+
+    @Test
+    fun `reshuffle assigns order badges to all tracks`() {
+        val queue = OrderedShuffleQueue()
+        val dummyTracks = (1..10).map {
+            Track(id = "track_$it", title = "Song $it", artist = "Artist", album = "Album", durationMs = 100000L)
+        }
+
+        queue.reshuffle(dummyTracks, currentTrackId = "track_1")
+        assertEquals(true, queue.isShuffleActive)
+        assertEquals(1, queue.getOrderBadge("track_1")) // current track remains #1
+
+        // All 10 badges 1..10 must be uniquely assigned
+        val allBadges = dummyTracks.map { queue.getOrderBadge(it.id) }.sorted()
+        assertEquals((1..10).toList(), allBadges)
+    }
 }
 

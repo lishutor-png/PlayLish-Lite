@@ -73,19 +73,28 @@ class MediaPlaybackService : Service() {
 
     // Audio Focus
     private var audioFocusRequest: AudioFocusRequest? = null
+    private var wasPlayingBeforeTransientLoss = false
     private val audioFocusChangeListener = AudioManager.OnAudioFocusChangeListener { focusChange ->
         when (focusChange) {
             AudioManager.AUDIOFOCUS_LOSS -> {
+                wasPlayingBeforeTransientLoss = false
                 MusicPlaybackCoordinator.onPauseAction?.invoke()
             }
             AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
-                MusicPlaybackCoordinator.onPauseAction?.invoke()
+                val currentlyPlaying = MusicPlaybackCoordinator.playbackInfo.value.isPlaying
+                if (currentlyPlaying) {
+                    wasPlayingBeforeTransientLoss = true
+                    MusicPlaybackCoordinator.onPauseAction?.invoke()
+                }
             }
             AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
                 // Background ducking handled if needed
             }
             AudioManager.AUDIOFOCUS_GAIN -> {
-                // Audio focus recovered
+                if (wasPlayingBeforeTransientLoss) {
+                    wasPlayingBeforeTransientLoss = false
+                    MusicPlaybackCoordinator.onPlayAction?.invoke()
+                }
             }
         }
     }

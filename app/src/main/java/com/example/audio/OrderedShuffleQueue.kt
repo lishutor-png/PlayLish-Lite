@@ -64,14 +64,15 @@ class OrderedShuffleQueue {
 
         if (currentTrackId != null && trackIds.contains(currentTrackId)) {
             trackIds.remove(currentTrackId)
-            trackIds.shuffle(Random(System.currentTimeMillis()))
-            // Put current track at #1 in the new sequence
+            // Thoroughly shuffle the remaining tracks using nanoTime seed
+            trackIds.shuffle(Random(System.nanoTime()))
+            // Put current track at #1 in the new sequence so current song is not disrupted
             val newSeq = mutableListOf(currentTrackId)
             newSeq.addAll(trackIds)
             _playbackSequence.addAll(newSeq)
             currentSequencePosition = 0
         } else {
-            trackIds.shuffle(Random(System.currentTimeMillis()))
+            trackIds.shuffle(Random(System.nanoTime()))
             _playbackSequence.addAll(trackIds)
             currentSequencePosition = 0
         }

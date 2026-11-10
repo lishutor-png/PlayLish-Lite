@@ -56,6 +56,7 @@ class AudioPlayerEngine(
             return Math.pow(10.0, totalGainDb / 20.0).toFloat().coerceIn(0.4f, 1.4f)
         }
 
+    val currentTrack: Track? get() = currentPlayingTrack
     val isPlaying: Boolean get() = isCurrentlyPlaying
     val currentPosition: Long
         get() {
@@ -118,6 +119,7 @@ class AudioPlayerEngine(
         }
 
         try {
+            val parsedUri = Uri.parse(uriStr)
             val player = MediaPlayer().apply {
                 setAudioAttributes(
                     AudioAttributes.Builder()
@@ -125,10 +127,25 @@ class AudioPlayerEngine(
                         .setUsage(AudioAttributes.USAGE_MEDIA)
                         .build()
                 )
-                setDataSource(context, Uri.parse(uriStr))
+                // Use openFileDescriptor for content:// URIs for rock-solid permission/sandboxing compatibility
+                var dataSourceSet = false
+                if (parsedUri.scheme == "content") {
+                    try {
+                        context.contentResolver.openFileDescriptor(parsedUri, "r")?.use { pfd ->
+                            setDataSource(pfd.fileDescriptor)
+                            dataSourceSet = true
+                        }
+                    } catch (_: Exception) {}
+                }
+                if (!dataSourceSet) {
+                    setDataSource(context, parsedUri)
+                }
+
                 setOnPreparedListener { mp ->
                     if (startPositionMs > 0) {
-                        mp.seekTo(startPositionMs.toInt())
+                        try {
+                            mp.seekTo(startPositionMs.toInt())
+                        } catch (_: Exception) {}
                     }
                     applyVolume()
                     mp.start()
@@ -246,10 +263,12 @@ class AudioPlayerEngine(
     fun resume() {
         if (!isCurrentlyPlaying && currentPlayingTrack != null) {
             mediaPlayer?.let {
-                applyVolume()
-                it.start()
-                isCurrentlyPlaying = true
-                return
+                try {
+                    applyVolume()
+                    it.start()
+                    isCurrentlyPlaying = true
+                    return
+                } catch (_: Exception) {}
             }
             synthTrack?.let {
                 isCurrentlyPlaying = true
@@ -278,7 +297,7 @@ class AudioPlayerEngine(
             mediaPlayer?.setOnCompletionListener(null)
             mediaPlayer?.setOnErrorListener(null)
             mediaPlayer?.setOnPreparedListener(null)
-            mediaPlayer?.stop()
+            mediaPlayer?.reset()
             mediaPlayer?.release()
         } catch (_: Exception) {}
         mediaPlayer = null

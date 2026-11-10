@@ -93,6 +93,7 @@ fun MainPlayerScreen(
         uiState.trackSortOption,
         uiState.sortQueueByShuffleOrder,
         uiState.isShuffleEnabled,
+        uiState.shuffleVersion,
         uiState.playlists
     ) {
         viewModel.getFilteredTracks()
