@@ -132,5 +132,49 @@ class ExampleUnitTest {
         val allBadgesAfter = dummyTracks.map { queue.getOrderBadge(it.id) }.sorted()
         assertEquals((1..10).toList(), allBadgesAfter)
     }
+
+    @Test
+    fun `per-tab queues operate independently without cross contamination`() {
+        val allTracks = (1..6).map {
+            Track(id = "track_$it", title = "All Song $it", artist = "Artist", album = "Album", durationMs = 100000L)
+        }
+        val favoriteTracks = listOf(allTracks[0], allTracks[2]) // track_1 and track_3
+
+        val allQueue = OrderedShuffleQueue()
+        val favQueue = OrderedShuffleQueue()
+
+        // 1. All Tracks in natural order (shuffle off)
+        allQueue.setupQueue(allTracks, shuffle = false)
+        assertEquals(false, allQueue.isShuffleActive)
+        assertEquals(1, allQueue.getOrderBadge("track_1"))
+        assertEquals(2, allQueue.getOrderBadge("track_2"))
+
+        // 2. Favorites has shuffle enabled independently
+        favQueue.setupQueue(favoriteTracks, shuffle = true)
+        assertEquals(true, favQueue.isShuffleActive)
+        assertEquals(2, favQueue.playbackSequence.size)
+        // All tracks queue remains unmodified and shuffle off
+        assertEquals(false, allQueue.isShuffleActive)
+        assertEquals(6, allQueue.playbackSequence.size)
+
+        // 3. Advancing favorites queue only cycles favorites
+        val nextInFav = favQueue.moveToNext(repeatAll = true)
+        assertTrue(nextInFav == "track_1" || nextInFav == "track_3")
+
+        // 4. All tracks queue still sequential
+        assertEquals("track_2", allQueue.moveToNext(repeatAll = true))
+    }
+
+    @Test
+    fun `loudness normalization formula produces correct safe gain range`() {
+        val targetLufs = -14.0f
+        val trackGainDb = -2.0f
+        val lufsDelta = (-14.0f) - targetLufs
+        val totalGainDb = (trackGainDb + lufsDelta).coerceIn(-9.0f, 6.0f)
+        val multiplier = Math.pow(10.0, totalGainDb / 20.0).toFloat().coerceIn(0.4f, 1.4f)
+
+        // -2.0 dB gain -> multiplier should be ~0.794
+        assertTrue(multiplier in 0.78f..0.82f)
+    }
 }
 

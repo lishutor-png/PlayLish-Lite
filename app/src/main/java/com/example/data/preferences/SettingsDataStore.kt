@@ -30,6 +30,7 @@ class SettingsDataStore(private val context: Context) {
         val HI_RES_ENGINE = booleanPreferencesKey("hi_res_engine")
         val IS_SHUFFLE = booleanPreferencesKey("is_shuffle")
         val SORT_BY_SHUFFLE = booleanPreferencesKey("sort_by_shuffle")
+        val TAB_SHUFFLE_STATES = stringPreferencesKey("tab_shuffle_states")
         val LOUDNESS_NORMALIZATION = booleanPreferencesKey("loudness_normalization")
         val TARGET_LOUDNESS_LUFS = floatPreferencesKey("target_loudness_lufs")
     }
@@ -94,10 +95,41 @@ class SettingsDataStore(private val context: Context) {
         }
     }
 
+    val tabShuffleStatesFlow: Flow<Map<String, Boolean>> = context.dataStore.data.map { preferences ->
+        val raw = preferences[PreferencesKeys.TAB_SHUFFLE_STATES] ?: ""
+        if (raw.isBlank()) {
+            emptyMap()
+        } else {
+            try {
+                raw.split(";").mapNotNull {
+                    val parts = it.split("=")
+                    if (parts.size == 2) parts[0] to parts[1].toBoolean() else null
+                }.toMap()
+            } catch (_: Exception) {
+                emptyMap()
+            }
+        }
+    }
+
     suspend fun updateShuffleState(isShuffle: Boolean, sortByShuffle: Boolean) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.IS_SHUFFLE] = isShuffle
             preferences[PreferencesKeys.SORT_BY_SHUFFLE] = sortByShuffle
+        }
+    }
+
+    suspend fun updateTabShuffleState(tabKey: String, isShuffle: Boolean) {
+        context.dataStore.edit { preferences ->
+            val raw = preferences[PreferencesKeys.TAB_SHUFFLE_STATES] ?: ""
+            val currentMap = if (raw.isBlank()) mutableMapOf() else {
+                raw.split(";").mapNotNull {
+                    val parts = it.split("=")
+                    if (parts.size == 2) parts[0] to parts[1].toBoolean() else null
+                }.toMap().toMutableMap()
+            }
+            currentMap[tabKey] = isShuffle
+            val serialized = currentMap.entries.joinToString(";") { "${it.key}=${it.value}" }
+            preferences[PreferencesKeys.TAB_SHUFFLE_STATES] = serialized
         }
     }
 

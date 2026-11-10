@@ -35,6 +35,9 @@ data class PlayerUiState(
     val currentPositionMs: Long = 0L,
     val durationMs: Long = 0L,
     val isShuffleEnabled: Boolean = false,
+    val tabShuffleStates: Map<String, Boolean> = emptyMap(),
+    val tabShuffleOrderMaps: Map<String, Map<String, Int>> = emptyMap(),
+    val activePlaybackTabKey: String = "category_Semua",
     val shuffleVersion: Long = 0L,
     val repeatMode: PlaybackRepeatMode = PlaybackRepeatMode.ALL,
     val shuffleOrderMap: Map<String, Int> = emptyMap(),
@@ -77,7 +80,19 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
     private val repository = MusicRepository(application.applicationContext)
     private val settingsDataStore = SettingsDataStore(application.applicationContext)
-    private val shuffleQueue = OrderedShuffleQueue()
+    // Per-tab shuffle queues: key is tabKey (e.g. "category_Semua", "playlist_pl_favorites")
+    private val tabShuffleQueues = mutableMapOf<String, OrderedShuffleQueue>()
+
+    fun getOrCreateQueueForTab(tabKey: String): OrderedShuffleQueue {
+        return tabShuffleQueues.getOrPut(tabKey) { OrderedShuffleQueue() }
+    }
+
+    val currentTabKey: String
+        get() = if (_uiState.value.selectedPlaylistId != null) {
+            "playlist_${_uiState.value.selectedPlaylistId}"
+        } else {
+            "category_${_uiState.value.selectedCategory}"
+        }
 
     private val _uiState = MutableStateFlow(PlayerUiState())
     val uiState: StateFlow<PlayerUiState> = _uiState.asStateFlow()
@@ -104,6 +119,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         setupMediaCoordinator()
         loadInitialTracks()
         observeSettings()
+        observeTabShuffleStates()
         startProgressTracker()
     }
 
@@ -153,12 +169,20 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     enabled = settings.loudnessNormalizationEnabled,
                     targetLufs = settings.targetLoudnessLufs
                 )
-                if (settings.isShuffleEnabled != _uiState.value.isShuffleEnabled) {
-                    toggleShuffle(explicitShuffleState = settings.isShuffleEnabled)
-                }
                 _uiState.value = _uiState.value.copy(
                     loudnessNormalizationActive = settings.loudnessNormalizationEnabled
                 )
+            }
+        }
+    }
+
+    private fun observeTabShuffleStates() {
+        viewModelScope.launch {
+            settingsDataStore.tabShuffleStatesFlow.collect { savedStates ->
+                _uiState.value = _uiState.value.copy(
+                    tabShuffleStates = savedStates
+                )
+                syncUiForCurrentTab()
             }
         }
     }
@@ -188,52 +212,68 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
-    private fun syncQueueWithFilteredTracks() {
-        val tracks = getFilteredTracks()
-        val currentId = _uiState.value.currentTrack?.id
-        val isShuffle = _uiState.value.isShuffleEnabled
-        shuffleQueue.setupQueue(tracks, isShuffle, currentId)
-
-        val queuePos = if (isShuffle) {
-            if (currentId != null) shuffleQueue.getOrderBadge(currentId) else 1
+    fun getTracksForTab(tabKey: String): List<Track> {
+        return if (tabKey.startsWith("playlist_")) {
+            val plId = tabKey.removePrefix("playlist_")
+            val playlist = _uiState.value.playlists.find { it.id == plId }
+            if (playlist != null) {
+                val trackMap = _allTracks.value.associateBy { it.id }
+                playlist.trackIds.mapNotNull { trackMap[it] }
+            } else {
+                emptyList()
+            }
         } else {
-            val idx = tracks.indexOfFirst { it.id == currentId }
+            val cat = tabKey.removePrefix("category_")
+            _allTracks.value.filter { track ->
+                when (cat) {
+                    "Semua" -> true
+                    "Hi-Res" -> track.isHiRes
+                    "Enerjik" -> track.category == "Enerjik"
+                    "Pengantar Tidur" -> track.category == "Pengantar Tidur"
+                    "Perangkat" -> track.isDeviceFile
+                    else -> true
+                }
+            }
+        }
+    }
+
+    fun syncUiForCurrentTab() {
+        val tabKey = currentTabKey
+        val isShuffleForTab = _uiState.value.tabShuffleStates[tabKey] ?: false
+        val tabTracks = getTracksForTab(tabKey)
+        val queue = getOrCreateQueueForTab(tabKey)
+
+        if (queue.playbackSequence.isEmpty() && tabTracks.isNotEmpty()) {
+            queue.setupQueue(tabTracks, isShuffleForTab, _uiState.value.currentTrack?.id)
+        }
+
+        val currentId = _uiState.value.currentTrack?.id
+        val queuePos = if (isShuffleForTab) {
+            if (currentId != null) queue.getOrderBadge(currentId) else 1
+        } else {
+            val idx = tabTracks.indexOfFirst { it.id == currentId }
             if (idx != -1) idx + 1 else 1
         }
 
+        val updatedOrderMaps = _uiState.value.tabShuffleOrderMaps + (tabKey to queue.orderIndexMap)
+
         _uiState.value = _uiState.value.copy(
-            shuffleOrderMap = shuffleQueue.orderIndexMap,
-            totalQueueCount = tracks.size,
+            isShuffleEnabled = isShuffleForTab,
+            shuffleOrderMap = queue.orderIndexMap,
+            tabShuffleOrderMaps = updatedOrderMaps,
+            totalQueueCount = tabTracks.size,
             currentQueuePosition = queuePos
         )
     }
 
+    private fun syncQueueWithFilteredTracks() {
+        syncUiForCurrentTab()
+    }
+
     fun getFilteredTracks(): List<Track> {
-        val category = _uiState.value.selectedCategory
+        val tabKey = currentTabKey
+        var filtered = getTracksForTab(tabKey)
         val query = _uiState.value.searchQuery.trim().lowercase()
-        val selectedPlId = _uiState.value.selectedPlaylistId
-
-        var filtered = _allTracks.value.filter { track ->
-            when (category) {
-                "Semua" -> true
-                "Hi-Res" -> track.isHiRes
-                "Enerjik" -> track.category == "Enerjik"
-                "Pengantar Tidur" -> track.category == "Pengantar Tidur"
-                "Perangkat" -> track.isDeviceFile
-                else -> true
-            }
-        }
-
-        // Filter by selected playlist while preserving exact playlist track sequence
-        if (selectedPlId != null) {
-            val playlist = _uiState.value.playlists.find { it.id == selectedPlId }
-            if (playlist != null) {
-                val trackMap = _allTracks.value.associateBy { it.id }
-                filtered = playlist.trackIds.mapNotNull { trackMap[it] }
-            } else {
-                filtered = emptyList()
-            }
-        }
 
         if (query.isNotEmpty()) {
             filtered = filtered.filter {
@@ -243,10 +283,13 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             }
         }
 
+        val isShuffleForTab = _uiState.value.tabShuffleStates[tabKey] ?: false
+        val tabQueue = getOrCreateQueueForTab(tabKey)
+
         filtered = when (_uiState.value.trackSortOption) {
             TrackSortOption.DEFAULT -> {
-                if (_uiState.value.isShuffleEnabled) {
-                    filtered.sortedBy { shuffleQueue.getOrderBadge(it.id) }
+                if (isShuffleForTab) {
+                    filtered.sortedBy { tabQueue.getOrderBadge(it.id) }
                 } else filtered
             }
             TrackSortOption.TITLE_ASC -> filtered.sortedBy { it.title.lowercase() }
@@ -255,7 +298,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             TrackSortOption.DURATION_DESC -> filtered.sortedByDescending { it.durationMs }
             TrackSortOption.DURATION_ASC -> filtered.sortedBy { it.durationMs }
             TrackSortOption.SHUFFLE_ORDER -> {
-                filtered.sortedBy { shuffleQueue.getOrderBadge(it.id) }
+                filtered.sortedBy { tabQueue.getOrderBadge(it.id) }
             }
         }
 
@@ -264,7 +307,8 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
     // --- Audio Playback Controls ---
 
-    fun playTrack(track: Track) {
+    fun playTrack(track: Track, fromTabKey: String? = null) {
+        val targetTabKey = fromTabKey ?: currentTabKey
         val isSameTrack = _uiState.value.currentTrack?.id == track.id
         if (isSameTrack && _uiState.value.isPlaying && audioEngine.isPlaying) {
             pause()
@@ -273,25 +317,34 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
         waitingForTrackToEndToSleep = false
         audioEngine.playTrack(track)
-        shuffleQueue.moveToTrack(track.id)
 
-        val tracks = getFilteredTracks()
-        val currentQueuePos = if (_uiState.value.isShuffleEnabled) {
-            shuffleQueue.getOrderBadge(track.id)
+        val playbackQueue = getOrCreateQueueForTab(targetTabKey)
+        val tabTracks = getTracksForTab(targetTabKey)
+        val isShuffle = _uiState.value.tabShuffleStates[targetTabKey] ?: false
+
+        if (playbackQueue.playbackSequence.isEmpty() && tabTracks.isNotEmpty()) {
+            playbackQueue.setupQueue(tabTracks, isShuffle, track.id)
         } else {
-            val idx = tracks.indexOfFirst { it.id == track.id }
+            playbackQueue.moveToTrack(track.id)
+        }
+
+        val currentQueuePos = if (isShuffle) {
+            playbackQueue.getOrderBadge(track.id)
+        } else {
+            val idx = tabTracks.indexOfFirst { it.id == track.id }
             if (idx != -1) idx + 1 else 1
         }
 
         _uiState.value = _uiState.value.copy(
             currentTrack = track,
+            activePlaybackTabKey = targetTabKey,
             isPlaying = true,
             currentPositionMs = 0L,
             durationMs = track.durationMs,
             currentLyrics = LyricsParser.parse(track.rawLyrics),
             activeLyricIndex = 0,
             currentQueuePosition = currentQueuePos,
-            totalQueueCount = tracks.size
+            totalQueueCount = tabTracks.size
         )
 
         MusicPlaybackCoordinator.updatePlaybackState(
@@ -324,10 +377,14 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     fun resume() {
-        val track = _uiState.value.currentTrack
-        if (track == null && _allTracks.value.isNotEmpty()) {
-            playTrack(_allTracks.value.first())
-            return
+        var track = _uiState.value.currentTrack
+        if (track == null) {
+            val currentTracks = getTracksForTab(currentTabKey)
+            track = currentTracks.firstOrNull() ?: _allTracks.value.firstOrNull()
+            if (track != null) {
+                playTrack(track)
+                return
+            }
         }
         if (track != null) {
             if (!audioEngine.isPlaying) {
@@ -337,15 +394,15 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     audioEngine.resume()
                 }
             }
+            _uiState.value = _uiState.value.copy(isPlaying = true)
+            MusicPlaybackCoordinator.updatePlaybackState(
+                context = getApplication(),
+                track = track,
+                isPlaying = true,
+                positionMs = _uiState.value.currentPositionMs,
+                durationMs = _uiState.value.durationMs
+            )
         }
-        _uiState.value = _uiState.value.copy(isPlaying = true)
-        MusicPlaybackCoordinator.updatePlaybackState(
-            context = getApplication(),
-            track = _uiState.value.currentTrack,
-            isPlaying = true,
-            positionMs = _uiState.value.currentPositionMs,
-            durationMs = _uiState.value.durationMs
-        )
     }
 
     fun seekTo(positionMs: Long) {
@@ -361,35 +418,47 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     fun playNext() {
-        val tracks = getFilteredTracks()
-        if (tracks.isEmpty()) return
+        val playbackTabKey = _uiState.value.activePlaybackTabKey
+        var tabTracks = getTracksForTab(playbackTabKey)
+        if (tabTracks.isEmpty()) {
+            tabTracks = getTracksForTab(currentTabKey)
+        }
+        if (tabTracks.isEmpty()) {
+            tabTracks = _allTracks.value
+        }
+        if (tabTracks.isEmpty()) return
 
-        val isShuffle = _uiState.value.isShuffleEnabled
-        val currentTrackId = _uiState.value.currentTrack?.id
+        val isShuffle = _uiState.value.tabShuffleStates[playbackTabKey] ?: false
+        val queue = getOrCreateQueueForTab(playbackTabKey)
+        if (queue.playbackSequence.isEmpty()) {
+            queue.setupQueue(tabTracks, isShuffle, _uiState.value.currentTrack?.id)
+        }
+
         val repeatMode = _uiState.value.repeatMode
+        val currentTrackId = _uiState.value.currentTrack?.id
 
         val nextTrack = if (isShuffle) {
-            val nextId = shuffleQueue.moveToNext(repeatAll = repeatMode != PlaybackRepeatMode.OFF)
-            tracks.find { it.id == nextId } ?: _allTracks.value.find { it.id == nextId }
+            val nextId = queue.moveToNext(repeatAll = repeatMode != PlaybackRepeatMode.OFF)
+            tabTracks.find { it.id == nextId } ?: _allTracks.value.find { it.id == nextId }
         } else {
             // Natural playlist order: strictly sequential
-            val currentIndex = tracks.indexOfFirst { it.id == currentTrackId }
+            val currentIndex = tabTracks.indexOfFirst { it.id == currentTrackId }
             if (currentIndex != -1) {
                 val nextIndex = currentIndex + 1
-                if (nextIndex < tracks.size) {
-                    tracks[nextIndex]
+                if (nextIndex < tabTracks.size) {
+                    tabTracks[nextIndex]
                 } else if (repeatMode != PlaybackRepeatMode.OFF) {
-                    tracks.firstOrNull()
+                    tabTracks.firstOrNull()
                 } else {
                     null
                 }
             } else {
-                tracks.firstOrNull()
+                tabTracks.firstOrNull()
             }
         }
 
         if (nextTrack != null) {
-            playTrack(nextTrack)
+            playTrack(nextTrack, fromTabKey = playbackTabKey)
         } else {
             // Reached the end of queue in repeat OFF mode
             pause()
@@ -404,35 +473,47 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             return
         }
 
-        val tracks = getFilteredTracks()
-        if (tracks.isEmpty()) return
+        val playbackTabKey = _uiState.value.activePlaybackTabKey
+        var tabTracks = getTracksForTab(playbackTabKey)
+        if (tabTracks.isEmpty()) {
+            tabTracks = getTracksForTab(currentTabKey)
+        }
+        if (tabTracks.isEmpty()) {
+            tabTracks = _allTracks.value
+        }
+        if (tabTracks.isEmpty()) return
 
-        val isShuffle = _uiState.value.isShuffleEnabled
-        val currentTrackId = _uiState.value.currentTrack?.id
+        val isShuffle = _uiState.value.tabShuffleStates[playbackTabKey] ?: false
+        val queue = getOrCreateQueueForTab(playbackTabKey)
+        if (queue.playbackSequence.isEmpty()) {
+            queue.setupQueue(tabTracks, isShuffle, _uiState.value.currentTrack?.id)
+        }
+
         val repeatMode = _uiState.value.repeatMode
+        val currentTrackId = _uiState.value.currentTrack?.id
 
         val prevTrack = if (isShuffle) {
-            val prevId = shuffleQueue.moveToPrevious()
-            tracks.find { it.id == prevId } ?: _allTracks.value.find { it.id == prevId }
+            val prevId = queue.moveToPrevious()
+            tabTracks.find { it.id == prevId } ?: _allTracks.value.find { it.id == prevId }
         } else {
             // Natural playlist order: strictly sequential
-            val currentIndex = tracks.indexOfFirst { it.id == currentTrackId }
+            val currentIndex = tabTracks.indexOfFirst { it.id == currentTrackId }
             if (currentIndex != -1) {
                 val prevIndex = currentIndex - 1
                 if (prevIndex >= 0) {
-                    tracks[prevIndex]
+                    tabTracks[prevIndex]
                 } else if (repeatMode != PlaybackRepeatMode.OFF) {
-                    tracks.lastOrNull()
+                    tabTracks.lastOrNull()
                 } else {
-                    tracks.firstOrNull()
+                    tabTracks.firstOrNull()
                 }
             } else {
-                tracks.firstOrNull()
+                tabTracks.firstOrNull()
             }
         }
 
         if (prevTrack != null) {
-            playTrack(prevTrack)
+            playTrack(prevTrack, fromTabKey = playbackTabKey)
         }
     }
 
@@ -452,67 +533,70 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         playNext()
     }
 
-    // --- Ordered Shuffle Feature ---
+    // --- Ordered Shuffle Feature (Per-Tab Rules) ---
 
     /**
-     * Toggles shuffle mode.
-     * When enabled, assigns explicit ordered numbers (#1, #2, #3, ...) to all songs.
+     * Toggles shuffle mode for the current tab.
+     * Each tab (e.g. Semua Lagu, Favorit, Hi-Res) maintains its own independent shuffle state.
      */
     fun toggleShuffle(explicitShuffleState: Boolean? = null) {
-        val newShuffle = explicitShuffleState ?: !_uiState.value.isShuffleEnabled
+        val tabKey = currentTabKey
+        val currentIsShuffle = _uiState.value.tabShuffleStates[tabKey] ?: false
+        val newShuffle = explicitShuffleState ?: !currentIsShuffle
         val currentTrackId = _uiState.value.currentTrack?.id
-        val tracks = _allTracks.value
-        val targetTracks = if (_uiState.value.selectedPlaylistId != null) {
-            val pl = _uiState.value.playlists.find { it.id == _uiState.value.selectedPlaylistId }
-            val map = tracks.associateBy { it.id }
-            pl?.trackIds?.mapNotNull { map[it] } ?: tracks
-        } else {
-            tracks
-        }
+        val tabTracks = getTracksForTab(tabKey)
 
-        shuffleQueue.setupQueue(targetTracks, newShuffle, currentTrackId)
+        val queue = getOrCreateQueueForTab(tabKey)
+        queue.setupQueue(tabTracks, newShuffle, currentTrackId)
+
+        val updatedShuffleStates = _uiState.value.tabShuffleStates + (tabKey to newShuffle)
+        val updatedOrderMaps = _uiState.value.tabShuffleOrderMaps + (tabKey to queue.orderIndexMap)
 
         val queuePos = if (newShuffle) {
-            if (currentTrackId != null) shuffleQueue.getOrderBadge(currentTrackId) else 1
+            if (currentTrackId != null) queue.getOrderBadge(currentTrackId) else 1
         } else {
-            val idx = targetTracks.indexOfFirst { it.id == currentTrackId }
+            val idx = tabTracks.indexOfFirst { it.id == currentTrackId }
             if (idx != -1) idx + 1 else 1
         }
 
         _uiState.value = _uiState.value.copy(
             isShuffleEnabled = newShuffle,
+            tabShuffleStates = updatedShuffleStates,
+            tabShuffleOrderMaps = updatedOrderMaps,
             shuffleVersion = _uiState.value.shuffleVersion + 1L,
-            shuffleOrderMap = shuffleQueue.orderIndexMap,
-            currentQueuePosition = queuePos
+            shuffleOrderMap = queue.orderIndexMap,
+            currentQueuePosition = queuePos,
+            totalQueueCount = tabTracks.size
         )
 
         viewModelScope.launch {
-            settingsDataStore.updateShuffleState(newShuffle, _uiState.value.sortQueueByShuffleOrder)
+            settingsDataStore.updateTabShuffleState(tabKey, newShuffle)
         }
     }
 
     /**
-     * Reshuffles the active tracks and visibly re-indexes order badges #1..#N.
+     * Reshuffles the active tracks in the current tab and visibly re-indexes order badges #1..#N.
      */
     fun reshuffle() {
-        val tracks = _allTracks.value
+        val tabKey = currentTabKey
         val currentTrackId = _uiState.value.currentTrack?.id
-        val targetTracks = if (_uiState.value.selectedPlaylistId != null) {
-            val pl = _uiState.value.playlists.find { it.id == _uiState.value.selectedPlaylistId }
-            val map = tracks.associateBy { it.id }
-            pl?.trackIds?.mapNotNull { map[it] } ?: tracks
-        } else {
-            tracks
-        }
+        val tabTracks = getTracksForTab(tabKey)
+        val queue = getOrCreateQueueForTab(tabKey)
 
-        val previousFirstId = shuffleQueue.playbackSequence.firstOrNull()
-        shuffleQueue.reshuffle(targetTracks, currentTrackId, forceDifferentFromTrackId = previousFirstId)
+        val previousFirstId = queue.playbackSequence.firstOrNull()
+        queue.reshuffle(tabTracks, currentTrackId, forceDifferentFromTrackId = previousFirstId)
+
+        val updatedShuffleStates = _uiState.value.tabShuffleStates + (tabKey to true)
+        val updatedOrderMaps = _uiState.value.tabShuffleOrderMaps + (tabKey to queue.orderIndexMap)
 
         _uiState.value = _uiState.value.copy(
             isShuffleEnabled = true,
+            tabShuffleStates = updatedShuffleStates,
+            tabShuffleOrderMaps = updatedOrderMaps,
             shuffleVersion = _uiState.value.shuffleVersion + 1L,
-            shuffleOrderMap = shuffleQueue.orderIndexMap,
-            currentQueuePosition = if (currentTrackId != null) shuffleQueue.getOrderBadge(currentTrackId) else 1
+            shuffleOrderMap = queue.orderIndexMap,
+            currentQueuePosition = if (currentTrackId != null) queue.getOrderBadge(currentTrackId) else 1,
+            totalQueueCount = tabTracks.size
         )
     }
 
@@ -661,8 +745,11 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     // --- Categories & Filtering ---
 
     fun selectCategory(category: String) {
-        _uiState.value = _uiState.value.copy(selectedCategory = category)
-        syncQueueWithFilteredTracks()
+        _uiState.value = _uiState.value.copy(
+            selectedCategory = category,
+            selectedPlaylistId = null
+        )
+        syncUiForCurrentTab()
     }
 
     fun setSearchQuery(query: String) {
@@ -733,7 +820,7 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
     fun selectPlaylist(playlistId: String?) {
         _uiState.value = _uiState.value.copy(selectedPlaylistId = playlistId)
-        syncQueueWithFilteredTracks()
+        syncUiForCurrentTab()
     }
 
     fun createPlaylist(name: String, description: String = "") {

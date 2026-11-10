@@ -7,6 +7,7 @@ import android.media.AudioManager
 import android.media.AudioTrack
 import android.media.MediaPlayer
 import android.net.Uri
+import android.os.ParcelFileDescriptor
 import com.example.data.model.Track
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -22,6 +23,7 @@ class AudioPlayerEngine(
     private val onTrackCompleted: () -> Unit
 ) {
     private var mediaPlayer: MediaPlayer? = null
+    private var currentPfd: ParcelFileDescriptor? = null
     private var synthTrack: AudioTrack? = null
     private var synthJob: Job? = null
     private val scope = CoroutineScope(Dispatchers.Default)
@@ -131,8 +133,10 @@ class AudioPlayerEngine(
                 var dataSourceSet = false
                 if (parsedUri.scheme == "content") {
                     try {
-                        context.contentResolver.openFileDescriptor(parsedUri, "r")?.use { pfd ->
-                            setDataSource(pfd.fileDescriptor)
+                        currentPfd?.close()
+                        currentPfd = context.contentResolver.openFileDescriptor(parsedUri, "r")
+                        currentPfd?.fileDescriptor?.let { fd ->
+                            setDataSource(fd)
                             dataSourceSet = true
                         }
                     } catch (_: Exception) {}
@@ -301,6 +305,10 @@ class AudioPlayerEngine(
             mediaPlayer?.release()
         } catch (_: Exception) {}
         mediaPlayer = null
+        try {
+            currentPfd?.close()
+        } catch (_: Exception) {}
+        currentPfd = null
 
         synthJob?.cancel()
         synthJob = null

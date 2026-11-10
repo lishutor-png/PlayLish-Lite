@@ -93,6 +93,7 @@ fun MainPlayerScreen(
         uiState.trackSortOption,
         uiState.sortQueueByShuffleOrder,
         uiState.isShuffleEnabled,
+        uiState.tabShuffleStates,
         uiState.shuffleVersion,
         uiState.playlists
     ) {
