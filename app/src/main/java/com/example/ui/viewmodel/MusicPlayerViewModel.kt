@@ -505,7 +505,8 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
             tracks
         }
 
-        shuffleQueue.reshuffle(targetTracks, currentTrackId)
+        val previousFirstId = shuffleQueue.playbackSequence.firstOrNull()
+        shuffleQueue.reshuffle(targetTracks, currentTrackId, forceDifferentFromTrackId = previousFirstId)
 
         _uiState.value = _uiState.value.copy(
             isShuffleEnabled = true,

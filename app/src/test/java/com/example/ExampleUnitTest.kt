@@ -104,19 +104,33 @@ class ExampleUnitTest {
     }
 
     @Test
-    fun `reshuffle assigns order badges to all tracks`() {
+    fun `reshuffle assigns order badges to all tracks and varies position 1`() {
         val queue = OrderedShuffleQueue()
         val dummyTracks = (1..10).map {
             Track(id = "track_$it", title = "Song $it", artist = "Artist", album = "Album", durationMs = 100000L)
         }
 
-        queue.reshuffle(dummyTracks, currentTrackId = "track_1")
+        // Setup with shuffle enabled, passing track_1 as initial
+        queue.setupQueue(dummyTracks, shuffle = true, keepCurrentTrackId = "track_1")
         assertEquals(true, queue.isShuffleActive)
-        assertEquals(1, queue.getOrderBadge("track_1")) // current track remains #1
 
         // All 10 badges 1..10 must be uniquely assigned
         val allBadges = dummyTracks.map { queue.getOrderBadge(it.id) }.sorted()
         assertEquals((1..10).toList(), allBadges)
+
+        // Record the first track in the sequence
+        val firstTrackBefore = queue.playbackSequence.first()
+
+        // Reshuffle with forceDifferentFromTrackId
+        queue.reshuffle(dummyTracks, currentTrackId = "track_1", forceDifferentFromTrackId = firstTrackBefore)
+        val firstTrackAfter = queue.playbackSequence.first()
+
+        // Position #1 must have changed to a different track
+        org.junit.Assert.assertNotEquals(firstTrackBefore, firstTrackAfter)
+
+        // All 10 badges must still be uniquely assigned
+        val allBadgesAfter = dummyTracks.map { queue.getOrderBadge(it.id) }.sorted()
+        assertEquals((1..10).toList(), allBadgesAfter)
     }
 }
 

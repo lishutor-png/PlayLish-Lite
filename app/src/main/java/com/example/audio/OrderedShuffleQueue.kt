@@ -22,9 +22,10 @@ class OrderedShuffleQueue {
     /**
      * Initializes or re-synchronizes the queue with the provided playlist.
      * If shuffle is off, order matches original playlist index (1, 2, 3, ...).
-     * If shuffle is on, order is randomized.
+     * If shuffle is on, order is randomized with guaranteed variation at position #1.
      */
     fun setupQueue(tracks: List<Track>, shuffle: Boolean, keepCurrentTrackId: String? = null) {
+        val previousFirstId = _playbackSequence.firstOrNull() ?: tracks.firstOrNull()?.id
         isShuffleActive = shuffle
         _orderIndexMap.clear()
         _playbackSequence.clear()
@@ -45,36 +46,54 @@ class OrderedShuffleQueue {
             } else 0
         } else {
             // Ordered Shuffle
-            reshuffle(tracks, keepCurrentTrackId)
+            reshuffle(tracks, keepCurrentTrackId, forceDifferentFromTrackId = previousFirstId)
         }
     }
 
     /**
-     * Re-shuffles the tracks and assigns new 1-based sequence numbers (#1, #2, #3, ...).
-     * If a track is currently playing, it becomes #1 or stays at the current position.
+     * Re-shuffles all tracks completely and assigns new 1-based sequence numbers (#1, #2, #3, ...).
+     * All tracks (including track #1 and any currently playing track) are randomized fairly.
+     * Position #1 is guaranteed to change when there are >= 2 tracks.
      */
-    fun reshuffle(tracks: List<Track>, currentTrackId: String? = null) {
+    fun reshuffle(
+        tracks: List<Track>,
+        currentTrackId: String? = null,
+        forceDifferentFromTrackId: String? = null
+    ) {
         if (tracks.isEmpty()) return
 
         isShuffleActive = true
+
+        // Capture previous #1 track to ensure position #1 actually changes
+        val previousFirstId = forceDifferentFromTrackId ?: _playbackSequence.firstOrNull()
+
         _orderIndexMap.clear()
         _playbackSequence.clear()
 
         val trackIds = tracks.map { it.id }.toMutableList()
 
-        if (currentTrackId != null && trackIds.contains(currentTrackId)) {
-            trackIds.remove(currentTrackId)
-            // Thoroughly shuffle the remaining tracks using nanoTime seed
-            trackIds.shuffle(Random(System.nanoTime()))
-            // Put current track at #1 in the new sequence so current song is not disrupted
-            val newSeq = mutableListOf(currentTrackId)
-            newSeq.addAll(trackIds)
-            _playbackSequence.addAll(newSeq)
-            currentSequencePosition = 0
+        if (trackIds.size > 1) {
+            val rng = Random(System.nanoTime())
+            trackIds.shuffle(rng)
+
+            // If by chance the track at index 0 is still the same as the previous #1 track,
+            // swap it with a random position from 1 until size - 1 so #1 always changes!
+            if (previousFirstId != null && trackIds.first() == previousFirstId) {
+                val swapIndex = rng.nextInt(1, trackIds.size)
+                val temp = trackIds[0]
+                trackIds[0] = trackIds[swapIndex]
+                trackIds[swapIndex] = temp
+            }
+        }
+
+        _playbackSequence.addAll(trackIds)
+
+        // Keep current playing track's position in sync with its new spot in the queue
+        currentSequencePosition = if (currentTrackId != null) {
+            val idx = _playbackSequence.indexOf(currentTrackId)
+            if (idx != -1) idx else 0
         } else {
-            trackIds.shuffle(Random(System.nanoTime()))
-            _playbackSequence.addAll(trackIds)
-            currentSequencePosition = 0
+            0
         }
 
         // Assign 1-based order badge to every song
